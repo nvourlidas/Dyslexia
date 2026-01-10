@@ -1,0 +1,66 @@
+/* src/index.css */
+@import "tailwindcss";
+
+/* ---------- Global Theme Tokens ---------- */
+/* Default = DARK (as you want) */
+@theme {
+  --color-bg: #253649;
+  --color-panel: #1f2d3d;
+  --color-panel2: #1f2d3d;
+
+  --color-text: #e5e7eb;
+  --color-muted: #aeb8e6;
+
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-accent: #ffc947;
+}
+
+/* Light theme override (when html has .light) */
+:root.light {
+  --color-bg: #ffffff;
+  --color-panel: #f5f6fa;
+  --color-panel2: #eceef5;
+
+  --color-text: #111827;
+  --color-muted: #6b7280;
+
+  --color-border: rgba(17, 24, 39, 0.12);
+  --color-accent: #3b82f6;
+}
+
+/* Base */
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); }
+
+/* ---------- Utilities using @apply ---------- */
+@layer utilities {
+  .card {
+    @apply rounded-2xl border p-4;
+    background: var(--color-panel);
+    border-color: var(--color-border);
+  }
+
+  .btn {
+    @apply rounded-lg border px-3 py-2 text-sm transition;
+    background: var(--color-panel2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+  .btn:hover { opacity: 0.9; }
+
+  .navlink {
+    @apply flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition;
+    border-color: transparent;
+    color: var(--color-muted);
+  }
+  .navlink:hover {
+    border-color: var(--color-border);
+    background: color-mix(in oklab, var(--color-panel) 70%, transparent);
+    color: var(--color-text);
+  }
+  .navlink-active {
+    border-color: var(--color-border);
+    background: var(--color-panel);
+    color: var(--color-text);
+  }
+}
