@@ -1,9 +1,10 @@
 // src/layout/AppShell.tsx
-import { Fragment, useMemo, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { NAV, type NavEntry } from '../_nav'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, LogOut, Settings, User as UserIcon } from 'lucide-react'
 import { getInitialTheme, toggleTheme, type ThemeMode } from '../theme/theme'
+import { useAuth } from '@/auth/AuthProvider'
 
 function cx(...arr: Array<string | false | undefined | null>) {
   return arr.filter(Boolean).join(' ')
@@ -14,10 +15,22 @@ function isActivePath(pathname: string, to: string, end?: boolean) {
   return pathname === to || pathname.startsWith(to + '/')
 }
 
+function getInitials(email?: string | null) {
+  if (!email) return 'U'
+  const left = email.split('@')[0] || 'u'
+  const parts = left.split(/[._-]+/).filter(Boolean)
+  const a = parts[0]?.[0] ?? left[0] ?? 'u'
+  const b = parts[1]?.[0] ?? ''
+  return (a + b).toUpperCase()
+}
+
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [mode, setMode] = useState<ThemeMode>(getInitialTheme())
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const { user, signOut } = useAuth()
 
   // keep groups with any active child opened by default
   const defaultOpenGroups = useMemo(() => {
@@ -41,6 +54,36 @@ export default function AppShell() {
   }
 
   const sidebarW = collapsed ? 'w-[84px]' : 'w-[280px]'
+
+  // ---- Profile dropdown ----
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileWrapRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (!profileWrapRef.current) return
+      if (!profileWrapRef.current.contains(e.target as Node)) setProfileOpen(false)
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setProfileOpen(false)
+    }
+
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [])
+
+  async function onLogout() {
+    try {
+      await signOut()
+    } finally {
+      setProfileOpen(false)
+      navigate('/login', { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-bg text-text">
@@ -91,9 +134,82 @@ export default function AppShell() {
                 {mode === 'dark' ? 'Φωτεινό' : 'Σκοτεινό'}
               </button>
 
-              <button className="btn">Προφίλ</button>
-              <button className="btn">Αποσύνδεση</button>
+              {/* Profile dropdown */}
+              <div className="relative" ref={profileWrapRef}>
+                <button
+                  type="button"
+                  className="btn flex items-center gap-2"
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={profileOpen}
+                >
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-panel text-xs font-semibold">
+                    {getInitials(user?.email)}
+                  </span>
+                  <span className="hidden max-w-55 truncate text-sm md:block">
+                    {user?.email ?? 'Λογαριασμός'}
+                  </span>
+                  <ChevronDown size={16} className={cx('transition', profileOpen && 'rotate-180')} />
+                </button>
 
+                {profileOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-2 w-72 rounded-2xl border border-border bg-panel p-2 shadow-lg"
+                  >
+                    <div className="px-2 py-2">
+                      <div className="text-sm font-semibold">Λογαριασμός</div>
+                      <div className="mt-1 truncate text-xs text-muted">
+                        {user?.email ?? '—'}
+                      </div>
+                    </div>
+
+                    <div className="my-2 border-t border-border/60" />
+
+                    <button
+                      type="button"
+                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-text hover:bg-panel2"
+                      onClick={() => {
+                        setProfileOpen(false)
+                        navigate('/profile')
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <UserIcon size={16} />
+                        Προφίλ
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="w-full rounded-xl px-3 py-2 text-left text-sm text-text hover:bg-panel2"
+                      onClick={() => {
+                        setProfileOpen(false)
+                        navigate('/themesettings')
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Settings size={16} />
+                        Ρυθμίσεις
+                      </span>
+                    </button>
+
+                    <div className="my-2 border-t border-border/60" />
+
+                    <button
+                      type="button"
+                      className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-panel2"
+                      style={{ color: 'var(--color-danger)' }}
+                      onClick={onLogout}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <LogOut size={16} />
+                        Αποσύνδεση
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -195,10 +311,7 @@ function NavBlock({
         {!collapsed && (
           <>
             <span className="flex-1 truncate text-left">{entry.label}</span>
-            <ChevronDown
-              size={16}
-              className={cx('transition', isOpen ? 'rotate-180' : '')}
-            />
+            <ChevronDown size={16} className={cx('transition', isOpen ? 'rotate-180' : '')} />
           </>
         )}
       </button>

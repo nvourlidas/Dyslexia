@@ -2,20 +2,39 @@
 @import "tailwindcss";
 
 /* ---------- Global Theme Tokens ---------- */
-/* Default = DARK (as you want) */
+/* Default = DARK */
 @theme {
-  --color-bg: #253649;
-  --color-panel: #1f2d3d;
-  --color-panel2: #1f2d3d;
+  /* ---------- Core surfaces ---------- */
+  --color-bg: #253649;                 /* background */
+  --color-panel: #1f2d3d;              /* cards / panels */
+  --color-panel2: #1f2d3d;             /* buttons / inputs */
 
-  --color-text: #e5e7eb;
-  --color-muted: #aeb8e6;
+  /* ---------- Text ---------- */
+  --color-text: #e5e7eb;               /* primary text */
+  --color-muted: #94a3b8;              /* secondary text */
 
+  /* ---------- Borders & accents ---------- */
   --color-border: rgba(255, 255, 255, 0.08);
   --color-accent: #ffc947;
+
+  /* ---------- Semantic colors (extended) ---------- */
+  --color-primary: #2f55d4;             /* main CTA */
+  --color-secondary: #64748b;           /* subtle buttons */
+  --color-success: #16a34a;             /* success / positive */
+  --color-danger: #dc2626;              /* error / destructive */
+  --color-warning: #f59e0b;             /* warnings */
+  --color-info: #38bdf8;                /* info / hints */
+
+  /* ---------- Text on colored backgrounds ---------- */
+  --color-on-primary: #ffffff;
+  --color-on-secondary: #ffffff;
+  --color-on-success: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-on-warning: #111827;
+  --color-on-info: #0f172a;
 }
 
-/* Light theme override (when html has .light) */
+/* ---------- Light theme override ---------- */
 :root.light {
   --color-bg: #ffffff;
   --color-panel: #f5f6fa;
@@ -26,20 +45,40 @@
 
   --color-border: rgba(17, 24, 39, 0.12);
   --color-accent: #3b82f6;
+
+  --color-primary: #2563eb;
+  --color-secondary: #475569;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-info: #0284c7;
+
+  --color-on-primary: #ffffff;
+  --color-on-secondary: #ffffff;
+  --color-on-success: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-on-warning: #111827;
+  --color-on-info: #ffffff;
 }
 
-/* Base */
+/* ---------- Base ---------- */
 html, body, #root { height: 100%; }
-body { margin: 0; background: var(--color-bg); color: var(--color-text); }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
 
-/* ---------- Utilities using @apply ---------- */
+/* ---------- Utilities ---------- */
 @layer utilities {
+  /* Cards */
   .card {
     @apply rounded-2xl border p-4;
     background: var(--color-panel);
     border-color: var(--color-border);
   }
 
+  /* Generic button */
   .btn {
     @apply rounded-lg border px-3 py-2 text-sm transition;
     background: var(--color-panel2);
@@ -48,16 +87,58 @@ body { margin: 0; background: var(--color-bg); color: var(--color-text); }
   }
   .btn:hover { opacity: 0.9; }
 
+  /* Semantic buttons */
+  .btn-primary {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .btn-success {
+    background: var(--color-success);
+    color: var(--color-on-success);
+  }
+
+  .btn-danger {
+    background: var(--color-danger);
+    color: var(--color-on-danger);
+  }
+
+  .btn-warning {
+    background: var(--color-warning);
+    color: var(--color-on-warning);
+  }
+
+  /* Inputs */
+  .input {
+    @apply h-9 w-full rounded-md border px-3 text-sm outline-none;
+    background: var(--color-panel2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .input::placeholder {
+    color: var(--color-muted);
+  }
+
+  /* Navigation */
   .navlink {
     @apply flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition;
     border-color: transparent;
     color: var(--color-muted);
   }
+
   .navlink:hover {
     border-color: var(--color-border);
     background: color-mix(in oklab, var(--color-panel) 70%, transparent);
     color: var(--color-text);
   }
+
   .navlink-active {
     border-color: var(--color-border);
     background: var(--color-panel);
