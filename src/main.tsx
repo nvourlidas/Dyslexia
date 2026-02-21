@@ -18,6 +18,8 @@ import TeachersPage from '@/pages/TeachersPage'
 import ThemeSettingsPage from '@/pages/ThemeSettingsPage'
 import SessionsPage from '@/pages/SessionsPage'
 import AttendancePage from '@/pages/AttendancePage'
+import ParapemptikaPage from '@/pages/ParapemptikaPage'
+import DocOpinionPage from '@/pages/DocOpinionPage'
 
 applyTheme(getInitialTheme())
 
@@ -34,6 +36,8 @@ const router = createBrowserRouter([
       { index: true, element: <Dashboard /> },
       { path: 'students', element: <StudentsPage /> },
       { path: 'teachers', element: <TeachersPage /> },
+      { path: 'parapeptika', element: <ParapemptikaPage /> },
+      { path: 'doc-opinion', element: <DocOpinionPage /> },
       { path: 'sessions', element: <SessionsPage /> },
       { path: 'attendance', element: <AttendancePage /> },
       { path: 'themesettings', element: <ThemeSettingsPage /> },

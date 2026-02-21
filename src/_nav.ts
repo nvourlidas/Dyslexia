@@ -26,6 +26,8 @@ export const NAV: NavEntry[] = [
   { type: 'item', label: 'Πίνακας', to: '/', end: true, icon: LayoutDashboard },
   { type: 'item', label: 'Μαθητές', to: '/students', icon: Users },
   { type: 'item', label: 'Καθηγητές', to: '/teachers', icon: ContactRound },
+  { type: 'item', label: 'Παραπεμπτικά', to: '/parapeptika', icon: ContactRound },
+  { type: 'item', label: 'Γνωματεύσεις', to: '/doc-opinion', icon: ContactRound },
 
   { type: 'section', title: 'Διαχείριση' },
   {
