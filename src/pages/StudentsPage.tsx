@@ -1,608 +1,445 @@
-import React, { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useAuth } from '@/auth/AuthProvider'
-import Modal from '@/components/students/Modal'
-import ConfirmModal from '@/components/students/ConfirmModal'
-import StudentsTable, { type StudentRow } from '@/components/students/StudentsTable'
+// src/pages/StudentsPage.tsx
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/auth/AuthProvider";
+import { Sheet, FileText } from "lucide-react";
+import StudentsTable from "@/components/students/StudentsTable";
+import ToastHost from "@/components/ui/ToastHost";
+import StudentCreateEditModal from "@/components/students/StudentCreateEditModal";
+import StudentsColumnsDropdown from "@/components/students/StudentsColumnsDropdown";
 
-type Gender = 'male' | 'female' | 'other' | 'unknown'
+import { callFunction } from "@/lib/api";
 
-type StudentForm = {
-  name: string
-  lastname: string
-  amka: string
-  gender: Gender
-  birthdate: string // yyyy-mm-dd
+import { useToast } from "@/hooks/useToast";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 
-  address: string
-  city: string
-  phone: string
-  email: string
+import { formatDateDMY, toForm, formToDb } from "@/lib/student.utils";
 
-  parent_name: string
-  parent_phone1: string
-  parent_phone2: string
+import {
+  buildStudentExportColumns,
+  studentToExportObject,
+} from "@/lib/student.export";
 
-  active: boolean
-  doctor_visit: boolean
-  doctor_name: string
-}
+import type {
+  StudentRow,
+  StudentForm,
+  ColumnKey,
+} from "@/types/student";
 
-const EMPTY_FORM: StudentForm = {
-  name: '',
-  lastname: '',
-  amka: '',
-  gender: 'unknown',
-  birthdate: '',
-  address: '',
-  city: '',
-  phone: '',
-  email: '',
-  parent_name: '',
-  parent_phone1: '',
-  parent_phone2: '',
-  active: true,
-  doctor_visit: false,
-  doctor_name: '',
-}
+import { registerNotoSansFonts } from "@/lib/pdfFonts";
 
-function cx(...arr: Array<string | false | undefined | null>) {
-  return arr.filter(Boolean).join(' ')
-}
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
-function toForm(s?: StudentRow | null): StudentForm {
-  if (!s) return { ...EMPTY_FORM }
-  return {
-    name: s.name ?? '',
-    lastname: s.lastname ?? '',
-    amka: s.amka ?? '',
-    gender: (s.gender ?? 'unknown') as Gender,
-    birthdate: s.birthdate ?? '',
-    address: s.address ?? '',
-    city: s.city ?? '',
-    phone: s.phone ?? '',
-    email: s.email ?? '',
-    parent_name: s.parent_name ?? '',
-    parent_phone1: s.parent_phone1 ?? '',
-    parent_phone2: s.parent_phone2 ?? '',
-    active: !!s.active,
-    doctor_visit: !!s.doctor_visit,
-    doctor_name: s.doctor_name ?? '',
-  }
-}
+// ✅ Greek-capable fonts
+import notoSansUrl from "@/assets/fonts/NotoSans-Regular.ttf?url";
+import notoSansBoldUrl from "@/assets/fonts/NotoSans-Bold.ttf?url";
 
-function formToDb(f: StudentForm) {
-  return {
-    name: f.name.trim(),
-    lastname: f.lastname.trim(),
-    amka: f.amka.trim() || null,
-    gender: f.gender,
-    birthdate: f.birthdate || null,
 
-    address: f.address.trim() || null,
-    city: f.city.trim() || null,
-    phone: f.phone.trim() || null,
-    email: f.email.trim() || null,
 
-    parent_name: f.parent_name.trim() || null,
-    parent_phone1: f.parent_phone1.trim() || null,
-    parent_phone2: f.parent_phone2.trim() || null,
 
-    active: f.active,
-    doctor_visit: f.doctor_visit,
-    doctor_name: f.doctor_name.trim() || null,
 
-    updated_at: new Date().toISOString(),
-  }
-}
+const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: "email", label: "Email" },
+  { key: "birthdate", label: "Ημ. Γέννησης" },
+  { key: "city", label: "Πόλη" },
+  { key: "address", label: "Διεύθυνση" },
+  { key: "amka", label: "ΑΜΚΑ" },
+  { key: "gender", label: "Φύλο" },
+  { key: "parent_name", label: "Γονέας" },
+  { key: "parent_phone1", label: "Τηλ. Γονέα 1" },
+  { key: "parent_phone2", label: "Τηλ. Γονέα 2" },
+  { key: "doctor_visit", label: "Επίσκεψη Γιατρού" },
+  { key: "doctor_name", label: "Γιατρός" },
+  { key: "created_at", label: "Ημ. Δημιουργίας" },
+];
 
-async function getMyTenantId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', userId)
-    .single()
+const DEFAULT_VISIBLE: ColumnKey[] = ["amka", "city", "created_at"];
 
-  if (error || !data?.tenant_id) {
-    throw new Error('Δεν βρέθηκε tenant για τον χρήστη.')
-  }
-  return data.tenant_id as string
-}
+
 
 export default function StudentsPage() {
-  const { user } = useAuth()
+  const { profile, profileLoading } = useAuth();
+  const tenantId = profile?.tenant_id ?? null;
 
-  const [tenantId, setTenantId] = useState<string | null>(null)
+  useEffect(() => {
+    if (profileLoading) return;
+    if (!tenantId) return;
+    load(); // uses tenantId
+  }, [profileLoading, tenantId]);
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [rows, setRows] = useState<StudentRow[]>([])
-  const [query, setQuery] = useState('')
+  const [q, setQ] = useState("");
+  const { toasts, pushToast, dismissToast } = useToast();
 
-  // modal state
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState<StudentRow | null>(null) // null => create
-  const [form, setForm] = useState<StudentForm>({ ...EMPTY_FORM })
+  // Create/Edit modal
+  const [showCreate, setShowCreate] = useState(false);
+  const [editRow, setEditRow] = useState<StudentRow | null>(null);
 
-  // pagination
-  const PAGE_SIZE = 15
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
 
-  // delete confirm modal
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteRow, setDeleteRow] = useState<StudentRow | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const allColumnKeys = useMemo(() => ALL_COLUMNS.map((c) => c.key) as ColumnKey[], []);
+
+  const {
+    visibleCols,
+    isColVisible,
+    toggleCol,
+    setAllCols,
+    resetCols,
+  } = useColumnVisibility<ColumnKey>({
+    allKeys: allColumnKeys,
+    defaultVisible: DEFAULT_VISIBLE,
+    storageKeyBase: "students_table_visible_cols_v1",
+    tenantId,
+  });
+
+
+  // selection + pagination (same behavior as MembersPage)
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  const clearSelection = () => setSelectedIds([]);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+
 
   const STUDENT_SELECT =
-    'user_id,tenant_id,name,lastname,amka,gender,birthdate,address,city,phone,email,parent_name,parent_phone1,parent_phone2,active,doctor_visit,doctor_name,created_at,updated_at'
+    "user_id,tenant_id,name,lastname,amka,gender,birthdate,address,city,phone,email,parent_name,parent_phone1,parent_phone2,active,doctor_visit,doctor_name,created_at,updated_at";
 
-  useEffect(() => {
-    let cancelled = false
-    async function boot() {
-      if (!user?.id) return
-      setError(null)
-      try {
-        const t = await getMyTenantId(user.id)
-        if (!cancelled) setTenantId(t)
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Σφάλμα tenant.')
-      }
-    }
-    boot()
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id])
+  async function load() {
+    if (!tenantId) return;
 
-  async function fetchStudents(tid: string, p = page, q = query) {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
 
-    const from = (p - 1) * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-
-    let req = supabase
-      .from('students')
-      .select(STUDENT_SELECT, { count: 'exact' })
-      .eq('tenant_id', tid)
-
-    const qq = q.trim()
-    if (qq) {
-      const safe = qq.replace(/,/g, ' ')
-      req = req.or(
-        `name.ilike.%${safe}%,lastname.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%,amka.ilike.%${safe}%,city.ilike.%${safe}%`,
-      )
-    }
-
-    const { data, error, count } = await req
-      .order('created_at', { ascending: false })
-      .range(from, to)
+    const { data, error } = await supabase
+      .from("students")
+      .select(STUDENT_SELECT)
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      setError(error.message)
-      setRows([])
-      setTotal(0)
-    } else {
-      setRows((data ?? []) as StudentRow[])
-      setTotal(count ?? 0)
+      console.error(error);
+      setRows([]);
+      setSelectedIds([]);
+      setLoading(false);
+      pushToast({
+        variant: "error",
+        title: "Αποτυχία φόρτωσης μαθητών",
+        message: error.message,
+      });
+      return;
     }
 
-    setLoading(false)
+    setRows((data as StudentRow[]) ?? []);
+    setSelectedIds([]);
+    setLoading(false);
   }
 
-  useEffect(() => {
-    if (!tenantId) return
-    fetchStudents(tenantId, page, query)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, page])
 
-  useEffect(() => {
-    if (!tenantId) return
-    setPage(1)
-    fetchStudents(tenantId, 1, query)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tenantId])
+  const filtered = useMemo(() => {
+    if (!q) return rows;
+    const needle = q.toLowerCase();
+    return rows.filter((r) => {
+      const full = `${r.lastname ?? ""} ${r.name ?? ""}`.trim().toLowerCase();
+      return (
+        full.includes(needle) ||
+        (r.phone ?? "").toLowerCase().includes(needle) ||
+        (r.email ?? "").toLowerCase().includes(needle) ||
+        (r.amka ?? "").toLowerCase().includes(needle) ||
+        (r.city ?? "").toLowerCase().includes(needle) ||
+        r.user_id.toLowerCase().includes(needle)
+      );
+    });
+  }, [rows, q]);
 
-  function openCreate() {
-    setEditing(null)
-    setForm({ ...EMPTY_FORM })
-    setModalOpen(true)
+  useEffect(() => setPage(1), [q, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  const startIdx = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endIdx = Math.min(filtered.length, page * pageSize);
+
+  const pageIds = paginated.map((s) => s.user_id);
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectPage = () => {
+    setSelectedIds((prev) => {
+      if (allPageSelected) return prev.filter((id) => !pageIds.includes(id));
+      return [...prev, ...pageIds.filter((id) => !prev.includes(id))];
+    });
+  };
+
+  // export (same logic)
+  const exportRows = useMemo(() => {
+    if (selectedIds.length > 0) {
+      return rows.filter((s) => selectedIds.includes(s.user_id));
+    }
+    return filtered;
+  }, [rows, filtered, selectedIds]);
+
+
+  function exportExcel() {
+    const cols = buildStudentExportColumns(visibleCols);
+    const data = exportRows.map((s) => {
+      const obj = studentToExportObject(s);
+      const out: Record<string, any> = {};
+      cols.forEach((c) => (out[c.label] = (obj as any)[c.key]));
+      return out;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    const filename = `students_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    saveAs(blob, filename);
   }
 
-  function openEdit(r: StudentRow) {
-    setEditing(r)
-    setForm(toForm(r))
-    setModalOpen(true)
+
+  async function exportPdf() {
+    const cols = buildStudentExportColumns(visibleCols);
+    const doc = new jsPDF({ orientation: "landscape" });
+
+    await registerNotoSansFonts(doc, notoSansUrl, notoSansBoldUrl);
+
+    doc.setFont("NotoSans", "normal");
+    doc.setFontSize(14);
+    doc.text(`Μαθητές (${exportRows.length})`, 14, 14);
+
+    const head = [cols.map((c) => c.label)];
+    const body = exportRows.map((s) => {
+      const obj = studentToExportObject(s);
+      return cols.map((c) => String((obj as any)[c.key] ?? ""));
+    });
+
+    autoTable(doc, {
+      head,
+      body,
+      startY: 20,
+      styles: { font: "NotoSans", fontStyle: "normal", fontSize: 9, cellPadding: 2 },
+      headStyles: { font: "NotoSans", fontStyle: "bold" },
+      theme: "grid",
+    });
+
+    doc.save(`students_${new Date().toISOString().slice(0, 10)}.pdf`);
   }
 
-  function closeModal() {
-    if (saving) return
-    setModalOpen(false)
-    setEditing(null)
-    setForm({ ...EMPTY_FORM })
-  }
+  // create/edit modal submit
+  const [busy, setBusy] = useState(false);
 
-  function setField<K extends keyof StudentForm>(k: K, v: StudentForm[K]) {
-    setForm((prev) => ({ ...prev, [k]: v }))
-  }
+  const openCreate = () => {
+    setEditRow(null);
+    setShowCreate(true);
+  };
 
-  function validate(f: StudentForm) {
-    if (!f.name.trim()) return 'Το όνομα είναι υποχρεωτικό.'
-    if (!f.lastname.trim()) return 'Το επώνυμο είναι υποχρεωτικό.'
-    return null
-  }
+  const openEdit = (r: StudentRow) => {
+    setEditRow(r);
+    setShowCreate(true);
+  };
 
-  async function onSave() {
-    if (!tenantId) return
-    const v = validate(form)
+  const validate = (f: StudentForm) => {
+    if (!f.name.trim()) return "Το όνομα είναι υποχρεωτικό.";
+    if (!f.lastname.trim()) return "Το επώνυμο είναι υποχρεωτικό.";
+    return null;
+  };
+
+
+  const save = async (f: StudentForm) => {
+    if (!tenantId) {
+      pushToast({ variant: "error", title: "Σφάλμα", message: "Δεν βρέθηκε tenant." });
+      return;
+    }
+
+    const v = validate(f);
     if (v) {
-      setError(v)
-      return
+      pushToast({ variant: "error", title: "Σφάλμα", message: v });
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setBusy(true);
 
     try {
-      if (!editing) {
-        const newId =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random()}`
-
+      if (!editRow) {
+        // ✅ CREATE
         const payload = {
-          user_id: newId,
           tenant_id: tenantId,
-          ...formToDb(form),
-          created_at: new Date().toISOString(),
-        }
+          ...formToDb(f),
+        };
 
-        const { data: inserted, error } = await supabase
-          .from('students')
-          .insert(payload)
-          .select(STUDENT_SELECT)
-          .single()
+        const res = await callFunction<{ id: string }>("student-create", payload);
 
-        if (error) throw error
-
-        setRows((prev) => [inserted as StudentRow, ...prev])
-        setTotal((t) => t + 1)
-        setPage(1)
-
-        closeModal()
-        fetchStudents(tenantId, 1, query)
+        pushToast({
+          variant: "success",
+          title: "Ο μαθητής δημιουργήθηκε",
+          message: res?.id ? `ID: ${res.id}` : undefined,
+        });
       } else {
-        const payload = formToDb(form)
+        // ✅ UPDATE
+        const payload = {
+          tenant_id: tenantId,
+          user_id: editRow.user_id,
+          ...formToDb(f),
+        };
 
-        const { data: updated, error } = await supabase
-          .from('students')
-          .update(payload)
-          .eq('tenant_id', tenantId)
-          .eq('user_id', editing.user_id)
-          .select(STUDENT_SELECT)
-          .single()
+        await callFunction<void>("student-update", payload);
 
-        if (error) throw error
-
-        setRows((prev) =>
-          prev.map((x) => (x.user_id === editing.user_id ? (updated as StudentRow) : x)),
-        )
-
-        closeModal()
-        fetchStudents(tenantId, page, query)
+        pushToast({
+          variant: "success",
+          title: "Οι αλλαγές αποθηκεύτηκαν",
+        });
       }
+
+      setShowCreate(false);
+      setEditRow(null);
+      await load();
     } catch (e: any) {
-      setError(e?.message ?? 'Σφάλμα αποθήκευσης.')
+      const code = e?.code as string | undefined;
+
+      if (code === "SUBSCRIPTION_INACTIVE") {
+        pushToast({
+          variant: "error",
+          title: "Η συνδρομή δεν είναι ενεργή",
+          message: e?.message ?? "Απαιτείται ενεργή συνδρομή.",
+        });
+        return;
+      }
+
+      pushToast({
+        variant: "error",
+        title: "Αποτυχία αποθήκευσης",
+        message: e?.message ?? "Unknown error",
+      });
     } finally {
-      setSaving(false)
+      setBusy(false);
     }
-  }
+  };
+  const desktopColCount =
+    3 + // checkbox + fullname + phone
+    visibleCols.length +
+    1; // actions
 
-  async function onToggleActive(r: StudentRow, next: boolean) {
-    if (!tenantId) return
-
-    setRows((prev) =>
-      prev.map((x) => (x.user_id === r.user_id ? { ...x, active: next } : x)),
-    )
-
-    const { error } = await supabase
-      .from('students')
-      .update({ active: next, updated_at: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('user_id', r.user_id)
-
-    if (error) {
-      setRows((prev) =>
-        prev.map((x) => (x.user_id === r.user_id ? { ...x, active: r.active } : x)),
-      )
-      setError(error.message)
-    }
-  }
-
-  function askDelete(r: StudentRow) {
-    setDeleteRow(r)
-    setDeleteOpen(true)
-  }
-
-  async function confirmDelete() {
-    if (!tenantId || !deleteRow) return
-    setDeleting(true)
-    setError(null)
-
-    const { error } = await supabase
-      .from('students')
-      .delete()
-      .eq('tenant_id', tenantId)
-      .eq('user_id', deleteRow.user_id)
-
-    if (error) {
-      setError(error.message)
-      setDeleting(false)
-      return
-    }
-
-    setDeleteOpen(false)
-    setDeleteRow(null)
-    setDeleting(false)
-
-    const newTotal = Math.max(0, total - 1)
-    const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE))
-    const nextPage = Math.min(page, newTotalPages)
-    setPage(nextPage)
-
-    fetchStudents(tenantId, nextPage, query)
-  }
+  const initialForm = useMemo(() => toForm(editRow), [editRow]);
 
   return (
-    <div className="rounded-2xl border border-border bg-panel p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="text-base font-semibold">Μαθητές</div>
-          <div className="text-xs text-muted">Διαχείριση μαθητών</div>
+    <div className="min-h-full w-full p-6">
+      <ToastHost toasts={toasts} dismiss={dismissToast} />
+
+      <div className="flex flex-wrap justify-between">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            className="h-9 rounded-md border border-border/10 bg-panel2 px-3 text-sm placeholder:text-muted"
+            placeholder="Αναζήτηση μαθητών…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+
+          <button
+            className="h-9 rounded-md px-3 text-sm bg-primary hover:bg-primary/90 text-white cursor-pointer"
+            onClick={openCreate}
+          >
+            Νέος Μαθητής
+          </button>
+
+          {selectedIds.length > 0 && (
+            <div className="text-xs text-text">
+              Επιλεγμένοι μαθητές:{" "}
+              <span className="font-semibold">{selectedIds.length}</span>{" "}
+              <button type="button" className="underline ml-1" onClick={clearSelection}>
+                (καθαρισμός)
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            className="input w-full sm:w-72"
-            placeholder="Αναζήτηση (όνομα, τηλ, email, ΑΜΚΑ...)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+        <div className="relative flex items-center gap-2">
+          <StudentsColumnsDropdown
+            columns={ALL_COLUMNS}
+            isColVisible={isColVisible}
+            toggleCol={toggleCol}
+            setAllCols={setAllCols}
+            resetCols={resetCols}
           />
-          <button className="btn btn-primary" onClick={openCreate}>
-            + Προσθήκη μαθητή
-          </button>
         </div>
       </div>
 
-      {error && (
-        <div className="mt-3 rounded-xl border border-border bg-panel2 p-3 text-sm">
-          <span style={{ color: 'var(--color-danger)' }}>{error}</span>
-        </div>
-      )}
+      {/* exports (same UI as MembersPage) */}
+      <div className="mb-2 flex gap-2">
+        <button
+          className="h-9 rounded-md px-3 text-sm border border-border/15 inline-flex items-center gap-2 text-text-primary hover:bg-[#26a347] hover:border-white/15 hover:text-white cursor-pointer"
+          onClick={() => exportExcel()}
+          disabled={loading || rows.length === 0}
+          title="Export Excel"
+        >
+          <Sheet className="h-4 w-4" />
+          Εξαγωγή Excel
+        </button>
 
-      {/* ✅ Students Table (reusable component) */}
+        <button
+          className="h-9 rounded-md px-3 text-sm border border-border/15 inline-flex items-center gap-2 text-text-primary hover:bg-[#db2525] hover:border-white/15 hover:text-white cursor-pointer"
+          onClick={() => exportPdf()}
+          disabled={loading || rows.length === 0}
+          title="Export PDF"
+        >
+          <FileText className="h-4 w-4" />
+          Εξαγωγή PDF
+        </button>
+      </div>
+
       <StudentsTable
-        rows={rows}
+        tenantId={tenantId}
         loading={loading}
+        filteredLength={filtered.length}
+        paginated={paginated}
+        desktopColCount={desktopColCount}
+        isColVisible={isColVisible}
+        selectedIds={selectedIds}
+        toggleSelect={toggleSelect}
+        clearSelection={clearSelection}
+        allPageSelected={allPageSelected}
+        toggleSelectPage={toggleSelectPage}
+        startIdx={startIdx}
+        endIdx={endIdx}
+        page={page}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        setPage={setPage}
+        setPageSize={setPageSize}
         onEdit={openEdit}
-        onDelete={askDelete}
-        onToggleActive={onToggleActive}
+        onDeleted={load}
+        formatDateDMY={formatDateDMY}
       />
 
-      {/* Pagination */}
-      <div className="mt-3 flex items-center justify-between text-sm">
-        <div className="text-muted">
-          Σύνολο: <span className="text-text">{total}</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-          >
-            Prev
-          </button>
-          <div className="text-muted">
-            Σελίδα <span className="text-text">{page}</span> /{' '}
-            <span className="text-text">{totalPages}</span>
-          </div>
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {/* Create / Edit Modal */}
-      <Modal
-        open={modalOpen}
-        title={editing ? 'Επεξεργασία μαθητή' : 'Προσθήκη μαθητή'}
-        onClose={closeModal}
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <div className="mb-1 text-xs text-muted">Όνομα *</div>
-            <input
-              className="input"
-              value={form.name}
-              onChange={(e) => setField('name', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Επώνυμο *</div>
-            <input
-              className="input"
-              value={form.lastname}
-              onChange={(e) => setField('lastname', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">ΑΜΚΑ</div>
-            <input
-              className="input"
-              value={form.amka}
-              onChange={(e) => setField('amka', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Φύλο</div>
-            <select
-              className="input"
-              value={form.gender}
-              onChange={(e) => setField('gender', e.target.value as Gender)}
-            >
-              <option value="unknown">unknown</option>
-              <option value="male">male</option>
-              <option value="female">female</option>
-              <option value="other">other</option>
-            </select>
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Ημ. Γέννησης</div>
-            <input
-              className="input"
-              type="date"
-              value={form.birthdate}
-              onChange={(e) => setField('birthdate', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Πόλη</div>
-            <input
-              className="input"
-              value={form.city}
-              onChange={(e) => setField('city', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Διεύθυνση</div>
-            <input
-              className="input"
-              value={form.address}
-              onChange={(e) => setField('address', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Τηλέφωνο</div>
-            <input
-              className="input"
-              value={form.phone}
-              onChange={(e) => setField('phone', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Email</div>
-            <input
-              className="input"
-              type="email"
-              value={form.email}
-              onChange={(e) => setField('email', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Όνομα Γονέα</div>
-            <input
-              className="input"
-              value={form.parent_name}
-              onChange={(e) => setField('parent_name', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Τηλ. Γονέα 1</div>
-            <input
-              className="input"
-              value={form.parent_phone1}
-              onChange={(e) => setField('parent_phone1', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Τηλ. Γονέα 2</div>
-            <input
-              className="input"
-              value={form.parent_phone2}
-              onChange={(e) => setField('parent_phone2', e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) => setField('active', e.target.checked)}
-              />
-              <span className="text-sm">Active</span>
-            </label>
-
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.doctor_visit}
-                onChange={(e) => setField('doctor_visit', e.target.checked)}
-              />
-              <span className="text-sm">Doctor visit</span>
-            </label>
-          </div>
-
-          <div>
-            <div className="mb-1 text-xs text-muted">Γιατρός</div>
-            <input
-              className="input"
-              value={form.doctor_name}
-              onChange={(e) => setField('doctor_name', e.target.value)}
-              disabled={!form.doctor_visit}
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <button className="btn" onClick={closeModal} disabled={saving}>
-            Ακύρωση
-          </button>
-          <button
-            className={cx('btn btn-success', saving && 'opacity-70')}
-            onClick={onSave}
-            disabled={saving}
-          >
-            {saving ? 'Αποθήκευση…' : 'Αποθήκευση'}
-          </button>
-        </div>
-      </Modal>
-
-      {/* Delete Confirm Modal */}
-      <ConfirmModal
-        open={deleteOpen}
-        title="Επιβεβαίωση διαγραφής"
-        message={
-          deleteRow
-            ? `Να διαγραφεί ο μαθητής:\n${deleteRow.lastname} ${deleteRow.name}\n\nΗ ενέργεια δεν αναιρείται.`
-            : ''
-        }
-        confirmText="Διαγραφή"
-        busy={deleting}
-        onClose={() => (!deleting ? setDeleteOpen(false) : null)}
-        onConfirm={confirmDelete}
+      {/* Create/Edit modal */}
+      <StudentCreateEditModal
+        open={showCreate}
+        busy={busy}
+        title={editRow ? "Επεξεργασία Μαθητή" : "Νέος Μαθητής"}
+        initialForm={initialForm}
+        onClose={() => {
+          if (busy) return;
+          setShowCreate(false);
+          setEditRow(null);
+        }}
+        onSave={(f) => save(f)}
       />
     </div>
-  )
+  );
 }

@@ -89,14 +89,14 @@ export default function AppShell() {
     <div className="min-h-screen bg-bg text-text">
       <div className="flex min-h-screen">
         {/* SIDEBAR */}
-        <aside className={cx('sticky top-0 h-screen shrink-0 border-r border-border bg-panel2', sidebarW)}>
+        <aside className={cx('sticky top-0 h-screen shrink-0 border-r border-border/15 bg-panel2', sidebarW)}>
           <div className="flex h-16 items-center justify-between px-4">
             <div className="font-semibold tracking-wide">
               {collapsed ? 'CRM' : 'CRM Web'}
             </div>
 
             <button
-              className="rounded-lg border border-border bg-panel px-2 py-1 text-xs hover:opacity-90"
+              className="rounded-lg border border-border/15 bg-panel px-2 py-1 text-xs hover:opacity-90"
               onClick={() => setCollapsed((v) => !v)}
               aria-label="Toggle sidebar"
               title="Toggle sidebar"
@@ -123,7 +123,7 @@ export default function AppShell() {
         {/* MAIN */}
         <div className="min-w-0 flex-1">
           {/* HEADER */}
-          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-panel/80 px-4 backdrop-blur">
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/15 bg-panel/80 px-4 backdrop-blur">
             <div className="flex items-center gap-3">
               <div className="text-sm font-semibold">CRM</div>
               <div className="text-xs text-muted">Tenant App</div>
@@ -143,7 +143,7 @@ export default function AppShell() {
                   aria-haspopup="menu"
                   aria-expanded={profileOpen}
                 >
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-panel text-xs font-semibold">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/15 bg-panel text-xs font-semibold">
                     {getInitials(user?.email)}
                   </span>
                   <span className="hidden max-w-55 truncate text-sm md:block">
@@ -155,7 +155,7 @@ export default function AppShell() {
                 {profileOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 mt-2 w-72 rounded-2xl border border-border bg-panel p-2 shadow-lg"
+                    className="absolute right-0 mt-2 w-72 rounded-2xl border border-border/15 bg-panel p-2 shadow-lg"
                   >
                     <div className="px-2 py-2">
                       <div className="text-sm font-semibold">Λογαριασμός</div>
@@ -164,7 +164,7 @@ export default function AppShell() {
                       </div>
                     </div>
 
-                    <div className="my-2 border-t border-border/60" />
+                    <div className="my-2 border-t border-border/15/60" />
 
                     <button
                       type="button"
@@ -194,7 +194,7 @@ export default function AppShell() {
                       </span>
                     </button>
 
-                    <div className="my-2 border-t border-border/60" />
+                    <div className="my-2 border-t border-border/15/60" />
 
                     <button
                       type="button"
@@ -215,7 +215,7 @@ export default function AppShell() {
 
           {/* CONTENT */}
           <main className="p-4">
-            <div className="mx-auto max-w-6xl">
+            <div className="flex-1 overflow-auto">
               <Outlet />
             </div>
           </main>
@@ -239,7 +239,7 @@ function NavBlock({
   pathname: string
 }) {
   if (entry.type === 'divider') {
-    return <div className="my-3 border-t border-border/60" />
+    return <div className="my-3 border-t border-border/15/60" />
   }
 
   if (entry.type === 'section') {
@@ -259,18 +259,18 @@ function NavBlock({
         className={({ isActive }) =>
           cx(
             'mb-1 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-            isActive ? 'border-border bg-panel text-text' : 'border-transparent text-muted hover:border-border hover:bg-panel/60 hover:text-text',
+            isActive ? 'border-border/15 bg-panel text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
             collapsed && 'justify-center px-2',
           )
         }
         title={collapsed ? entry.label : undefined}
       >
         {Icon ? (
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-panel">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
             <Icon size={18} />
           </span>
         ) : (
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-panel">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
             {entry.label[0]}
           </span>
         )}
@@ -299,12 +299,12 @@ function NavBlock({
         }}
         className={cx(
           'flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-          anyActive ? 'border-border bg-panel text-text' : 'border-transparent text-muted hover:border-border hover:bg-panel/60 hover:text-text',
+          anyActive ? 'border-border/15 bg-panel text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
           collapsed && 'justify-center px-2',
         )}
         title={collapsed ? entry.label : undefined}
       >
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-panel">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
           {GroupIcon ? <GroupIcon size={18} /> : entry.label[0]}
         </span>
 
@@ -329,7 +329,7 @@ function NavBlock({
                 className={() =>
                   cx(
                     'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-                    active ? 'border-border bg-panel2 text-text' : 'border-transparent text-muted hover:border-border hover:bg-panel/60 hover:text-text',
+                    active ? 'border-border/15 bg-panel2 text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
                   )
                 }
               >

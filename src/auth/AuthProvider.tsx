@@ -2,16 +2,27 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 
+
+type ProfileRow = {
+    id: string;
+    tenant_id: string | null;
+    role: "admin" | "member" | "student" | string;
+};
+
 type AuthContextValue = {
     user: User | null;
     session: Session | null;
     loading: boolean;
 
+    profile: ProfileRow | null;
+    profileLoading: boolean;
+
     signInWithPassword: (email: string, password: string) => Promise<void>;
     signUpWithPassword: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
 
-    assertAdmin: (userId: string) => Promise<void>; // 👈 ADD THIS
+    assertAdmin: (userId: string) => Promise<void>;
+    refreshProfile: () => Promise<void>; // ✅ ADD (so pages can refetch if needed)
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -19,6 +30,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const [profile, setProfile] = useState<ProfileRow | null>(null);
+    const [profileLoading, setProfileLoading] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -41,45 +55,94 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    async function fetchProfile(userId: string) {
+        setProfileLoading(true);
+
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("id, tenant_id, role")
+            .eq("id", userId)
+            .maybeSingle();
+
+        if (error) {
+            console.warn("[auth] profile load error:", error.message);
+            setProfile(null);
+            setProfileLoading(false);
+            return;
+        }
+
+        setProfile((data as ProfileRow) ?? null);
+        setProfileLoading(false);
+    }
+
+    const refreshProfile = async () => {
+        const uid = session?.user?.id;
+        if (!uid) {
+            setProfile(null);
+            return;
+        }
+        await fetchProfile(uid);
+    };
+
+    // ✅ whenever user changes -> load profile (tenant_id included)
+    useEffect(() => {
+        const uid = session?.user?.id;
+        if (!uid) {
+            setProfile(null);
+            return;
+        }
+        fetchProfile(uid);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session?.user?.id]);
+
+
     async function assertAdmin(userId: string) {
         const { data, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', userId)
+            .from("profiles")
+            .select("role")
+            .eq("id", userId)
             .single();
 
-        if (error || !data || data.role !== 'admin') {
-            throw new Error('Μη εξουσιοδοτημένος χρήστης');
+        if (error || !data || data.role !== "admin") {
+            throw new Error("Μη εξουσιοδοτημένος χρήστης");
         }
     }
 
+    const value = useMemo<AuthContextValue>(
+        () => ({
+            user: session?.user ?? null,
+            session,
+            loading,
 
-    const value = useMemo<AuthContextValue>(() => ({
-        user: session?.user ?? null,
-        session,
-        loading,
+            profile,
+            profileLoading,
+            refreshProfile, // ✅ ADD THIS
 
-        async signInWithPassword(email, password) {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) throw error;
-        },
+            async signInWithPassword(email, password) {
+                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+            },
 
-        async signUpWithPassword(email, password) {
-            const { error } = await supabase.auth.signUp({ email, password });
-            if (error) throw error;
-        },
+            async signUpWithPassword(email, password) {
+                const { error } = await supabase.auth.signUp({ email, password });
+                if (error) throw error;
+            },
 
-        async signOut() {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
-        },
+            async signOut() {
+                const { error } = await supabase.auth.signOut();
+                if (error) throw error;
+                setProfile(null);
+                setProfileLoading(false);
+            },
 
-        assertAdmin, // 👈 ADD THIS
-    }), [session, loading]);
-
+            assertAdmin,
+        }),
+        [session, loading, profile, profileLoading, refreshProfile] // ✅ include it here too
+    );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
 
 export function useAuth() {
     const ctx = useContext(AuthContext);
