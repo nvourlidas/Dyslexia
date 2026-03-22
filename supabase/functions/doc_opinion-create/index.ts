@@ -1,32 +1,103 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts"
-
-console.log("Hello from Functions!")
+import { withCors } from "../_shared/cors.ts";
+import { adminClient, authedClient } from "../_shared/supabase.ts";
+import { getCallerProfileOrFail } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
+  console.log("doc_opinion-create HIT", req.method, "origin:", req.headers.get("origin"));
+
+  if (req.method === "OPTIONS") {
+    return withCors(null, { status: 204 }, req);
   }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
-})
+  if (req.method !== "POST") {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } }),
+      { status: 405, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
 
-/* To invoke locally:
+  let payload: any;
+  try {
+    payload = await req.json();
+  } catch {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "INVALID_JSON", message: "Invalid JSON body" } }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+  const { student_id, start_date, end_date, notes } = payload ?? {};
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/doc_opinion-create' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
+  if (!student_id || !start_date) {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "MISSING_FIELDS", message: "Το student_id και το start_date είναι υποχρεωτικά." } }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
 
-*/
+  const userClient = authedClient(req);
+  const caller = await getCallerProfileOrFail(req, userClient);
+  if (!caller.ok) return caller.res;
+  console.log("CALLER OK, tenantId:", caller.tenantId);
+
+  const admin = adminClient();
+
+  const { data: studentRow, error: studentErr } = await admin
+    .from("students")
+    .select("user_id, tenant_id")
+    .eq("tenant_id", caller.tenantId)
+    .eq("user_id", String(student_id))
+    .maybeSingle();
+
+  console.log("STUDENT CHECK:", JSON.stringify({ studentRow, studentErr }));
+
+  if (studentErr) {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "STUDENT_CHECK_FAILED", message: studentErr.message } }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
+
+  if (!studentRow) {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "STUDENT_NOT_FOUND", message: "Ο επιλεγμένος μαθητής δεν βρέθηκε στο tenant σου." } }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
+
+  const newId = crypto.randomUUID();
+
+  const insertPayload = {
+    id: newId,
+    tenant_id: caller.tenantId,
+    student_id: String(student_id),
+    start_date: String(start_date),
+    end_date: end_date ? String(end_date) : null,
+    notes: notes ? String(notes).trim() : null,
+    created_at: new Date().toISOString(),
+    
+  };
+
+  console.log("INSERTING doc_opinion...", JSON.stringify(insertPayload));
+  const { error } = await admin.from("doc_opinion").insert(insertPayload);
+  console.log("INSERT DONE, error:", JSON.stringify(error));
+
+  if (error) {
+    return withCors(
+      JSON.stringify({ ok: false, error: { code: "DB_INSERT_FAILED", message: error.message } }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+      req,
+    );
+  }
+
+  return withCors(
+    JSON.stringify({ ok: true, data: { id: newId } }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+    req,
+  );
+});

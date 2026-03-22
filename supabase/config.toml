@@ -368,7 +368,7 @@ entrypoint = "./functions/student-delete/index.ts"
 
 [functions.doc_opinion-create]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/doc_opinion-create/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -379,7 +379,7 @@ entrypoint = "./functions/doc_opinion-create/index.ts"
 
 [functions.doc_opinion-update]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/doc_opinion-update/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -390,7 +390,7 @@ entrypoint = "./functions/doc_opinion-update/index.ts"
 
 [functions.doc_opinion-delete]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/doc_opinion-delete/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

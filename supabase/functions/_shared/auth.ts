@@ -16,8 +16,11 @@ export async function getCallerProfileOrFail(
   req: Request,
   userClient: any,
 ): Promise<CallerOk | CallerFail> {
-  // ✅ This reads the Authorization header that you injected in authedClient()
-  const { data: u, error: uErr } = await userClient.auth.getUser();
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "");
+
+  const { data: u, error: uErr } = await userClient.auth.getUser(token);
+  console.log("getUser result:", JSON.stringify(uErr), u?.user?.id);
 
   if (uErr || !u?.user) {
     return {

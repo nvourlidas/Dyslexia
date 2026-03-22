@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/auth/AuthProvider";
+import { callFunction } from "@/lib/api";
 
 import DocOpinionTable, {
   type DocOpinionRow,
@@ -143,7 +144,6 @@ export default function DocOpinionPage() {
     const qq = q.trim();
     if (qq) {
       const safe = qq.replace(/,/g, " ");
-      // ✅ πιο safe search (χωρίς ::text)
       req = req.or(`notes.ilike.%${safe}%,student_id.ilike.%${safe}%`);
     }
 
@@ -157,13 +157,13 @@ export default function DocOpinionPage() {
       setTotal(0);
     } else {
       const transformed = (data ?? []).map((item: any) => ({
-  ...item,
-  student: Array.isArray(item.student)
-    ? item.student[0] ?? null
-    : item.student ?? null,
-})) as DocOpinionRow[];
+        ...item,
+        student: Array.isArray(item.student)
+          ? item.student[0] ?? null
+          : item.student ?? null,
+      })) as DocOpinionRow[];
 
-setRows(transformed);
+      setRows(transformed);
       setTotal(count ?? 0);
     }
 
@@ -227,34 +227,19 @@ setRows(transformed);
 
     try {
       if (!editing) {
-        const payload = {
-          tenant_id: tenantId,
-          ...formToDb(form),
-          created_at: new Date().toISOString(),
-        };
-
-        const { data: inserted, error } = await supabase
-          .from("doc_opinion")
-          .insert(payload)
-          .select(SELECT)
-          .single();
-
-        if (error) throw error;
-
-        const transformedInserted = {
-  ...inserted,
-  student: Array.isArray(inserted.student)
-    ? inserted.student[0] ?? null
-    : inserted.student ?? null,
-} as DocOpinionRow;
-
-setRows((prev) => [transformedInserted, ...prev]);
-        setTotal((t) => t + 1);
-        setPage(1);
+        // ✅ CREATE via edge function (same pattern as StudentsPage)
+        await callFunction<{ id: string }>("doc_opinion-create", {
+          student_id: form.student_id,
+          start_date: form.start_date,
+          end_date: form.end_date || null,
+          notes: form.notes.trim() || null,
+        });
 
         closeModal();
-        fetchDocOpinions(tenantId, 1, query);
+        setPage(1);
+        await fetchDocOpinions(tenantId, 1, query);
       } else {
+        // ✅ UPDATE stays as direct supabase call (no edge function yet)
         const payload = formToDb(form);
 
         const { data: updated, error } = await supabase
@@ -268,20 +253,27 @@ setRows((prev) => [transformedInserted, ...prev]);
         if (error) throw error;
 
         const transformedUpdated = {
-  ...updated,
-  student: Array.isArray(updated.student)
-    ? updated.student[0] ?? null
-    : updated.student ?? null,
-} as DocOpinionRow;
+          ...updated,
+          student: Array.isArray(updated.student)
+            ? updated.student[0] ?? null
+            : updated.student ?? null,
+        } as DocOpinionRow;
 
-setRows((prev) =>
-  prev.map((x) => (x.id === editing.id ? transformedUpdated : x))
-);
+        setRows((prev) =>
+          prev.map((x) => (x.id === editing.id ? transformedUpdated : x))
+        );
 
         closeModal();
         fetchDocOpinions(tenantId, page, query);
       }
     } catch (e: any) {
+      const code = e?.code as string | undefined;
+
+      if (code === "SUBSCRIPTION_INACTIVE") {
+        setError(e?.message ?? "Απαιτείται ενεργή συνδρομή.");
+        return;
+      }
+
       setError(e?.message ?? "Σφάλμα αποθήκευσης.");
     } finally {
       setSaving(false);

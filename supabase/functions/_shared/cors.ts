@@ -23,12 +23,16 @@ export function buildCors(req: Request) {
 }
 
 export function withCors(
-    body: BodyInit | null,
-    init: ResponseInit,
-    req: Request,
+  body: BodyInit | null,
+  init: ResponseInit,
+  req: Request,
 ) {
-    return new Response(body, {
-        ...init,
-        headers: { ...(init.headers || {}), ...buildCors(req) },
-    });
+  return new Response(body, {
+    ...init,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}), // ← add this
+      ...(init.headers || {}),
+      ...buildCors(req),
+    },
+  });
 }
