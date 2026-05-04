@@ -51,7 +51,7 @@ serve(async (req) => {
         tenant_id: caller.tenantId,
         session_id: String(id),
         student_id: String(student_id),
-        status: "absent",
+        status: "present",
         marked_at: new Date().toISOString(),
       });
       if (attErr)
