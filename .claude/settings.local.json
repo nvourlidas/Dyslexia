@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:\\\\Users\\\\surfe\\\\Desktop\\\\Cloudtec Projects\\\\Dyslexia\" status)",
+      "Bash(git -C \"c:\\\\Users\\\\surfe\\\\Desktop\\\\Cloudtec Projects\\\\Dyslexia\" diff HEAD)",
+      "Bash(git -C \"c:\\\\Users\\\\surfe\\\\Desktop\\\\Cloudtec Projects\\\\Dyslexia\" add src/pages/AttendancePage.tsx)",
+      "Bash(git -C 'c:\\\\Users\\\\surfe\\\\Desktop\\\\Cloudtec Projects\\\\Dyslexia' commit -m ' *)"
+    ]
+  }
+}

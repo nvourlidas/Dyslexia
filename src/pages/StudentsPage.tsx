@@ -2,11 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/auth/AuthProvider";
-import { Sheet, FileText } from "lucide-react";
+import { Sheet, FileText, Trash2 } from "lucide-react";
 import StudentsTable from "@/components/students/StudentsTable";
 import ToastHost from "@/components/ui/ToastHost";
 import StudentCreateEditModal from "@/components/students/StudentCreateEditModal";
 import StudentsColumnsDropdown from "@/components/students/StudentsColumnsDropdown";
+import BulkDeleteConfirmModal from "@/components/ui/BulkDeleteConfirmModal";
 
 import { callFunction } from "@/lib/api";
 
@@ -105,6 +106,25 @@ export default function StudentsPage() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   const clearSelection = () => setSelectedIds([]);
+
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  async function bulkDelete() {
+    if (!tenantId || selectedIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await callFunction("student-bulk-delete", { ids: selectedIds });
+      pushToast({ variant: "success", title: `Διαγράφηκαν ${selectedIds.length} μαθητές` });
+      clearSelection();
+      setBulkDeleteOpen(false);
+      await load();
+    } catch (e: any) {
+      pushToast({ variant: "error", title: "Σφάλμα διαγραφής", message: e?.message });
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -359,11 +379,21 @@ export default function StudentsPage() {
           </button>
 
           {selectedIds.length > 0 && (
-            <div className="text-xs text-text">
-              Επιλεγμένοι μαθητές:{" "}
-              <span className="font-semibold">{selectedIds.length}</span>{" "}
-              <button type="button" className="underline ml-1" onClick={clearSelection}>
-                (καθαρισμός)
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-text">
+                Επιλεγμένοι μαθητές:{" "}
+                <span className="font-semibold">{selectedIds.length}</span>{" "}
+                <button type="button" className="underline ml-1" onClick={clearSelection}>
+                  (καθαρισμός)
+                </button>
+              </div>
+              <button
+                type="button"
+                className="h-8 rounded-md px-3 text-xs border border-red-400/60 text-red-400 hover:bg-red-500/10 inline-flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Διαγραφή επιλεγμένων
               </button>
             </div>
           )}
@@ -425,6 +455,15 @@ export default function StudentsPage() {
         onEdit={openEdit}
         onDeleted={load}
         formatDateDMY={formatDateDMY}
+      />
+
+      <BulkDeleteConfirmModal
+        open={bulkDeleteOpen}
+        count={selectedIds.length}
+        entityLabel="μαθητές"
+        busy={bulkDeleting}
+        onConfirm={bulkDelete}
+        onClose={() => setBulkDeleteOpen(false)}
       />
 
       {/* Create/Edit modal */}

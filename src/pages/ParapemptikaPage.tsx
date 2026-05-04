@@ -1,14 +1,23 @@
 // src/pages/ParapemptikaPage.tsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Sheet, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/auth/AuthProvider";
+import { callFunction } from "@/lib/api";
 
 import ParapemptikoTable, {
   type ParapemtikoRow,
+  type ParapemptikoColKey,
 } from "@/components/parapemptiko/ParapemptikoTable";
 
 import ParapemptikoModal from "@/components/parapemptiko/ParapemptikoModal";
 import ParapemptikoConfirmModal from "@/components/parapemptiko/ParapemptikoConfirmModal";
+import StudentsColumnsDropdown from "@/components/students/StudentsColumnsDropdown";
+import BulkDeleteConfirmModal from "@/components/ui/BulkDeleteConfirmModal";
+import { useColumnVisibility } from "@/hooks/useColumnVisibility";
+
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 type DocOpinionRow = {
   id: string;
@@ -39,6 +48,20 @@ const EMPTY_FORM: ParapemtikoForm = {
   status: "active",
   notes: "",
 };
+
+const PARAP_ALL_COLUMNS: { key: ParapemptikoColKey; label: string }[] = [
+  { key: "code", label: "Κωδικός" },
+  { key: "code_diagnosis", label: "Κωδ. Διάγνωσης" },
+  { key: "start_date", label: "Έναρξη" },
+  { key: "end_date", label: "Λήξη" },
+  { key: "status", label: "Status" },
+  { key: "notes", label: "Σημειώσεις" },
+  { key: "created_at", label: "Ημ. Δημιουργίας" },
+];
+
+const PARAP_DEFAULT_VISIBLE: ParapemptikoColKey[] = ["start_date", "end_date", "status"];
+
+const PARAP_ALL_KEYS = PARAP_ALL_COLUMNS.map((c) => c.key) as ParapemptikoColKey[];
 
 async function getMyTenantId(userId: string): Promise<string> {
   const { data, error } = await supabase
@@ -92,24 +115,44 @@ export default function ParapemptikaPage() {
   const [rows, setRows] = useState<ParapemtikoRow[]>([]);
   const [query, setQuery] = useState("");
 
-  // doc opinions for dropdown
   const [docOpinions, setDocOpinions] = useState<DocOpinionRow[]>([]);
 
-  // modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ParapemtikoRow | null>(null);
   const [form, setForm] = useState<ParapemtikoForm>({ ...EMPTY_FORM });
 
-  // pagination
   const PAGE_SIZE = 15;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // delete confirm modal
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteRow, setDeleteRow] = useState<ParapemtikoRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const clearSelection = () => setSelectedIds([]);
+
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const pageIds = useMemo(() => rows.map((r) => r.id), [rows]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+  const toggleSelectPage = () => {
+    setSelectedIds((prev) =>
+      allPageSelected ? prev.filter((id) => !pageIds.includes(id)) : [...prev, ...pageIds.filter((id) => !prev.includes(id))]
+    );
+  };
+
+  const { isColVisible, toggleCol, setAllCols, resetCols } =
+    useColumnVisibility<ParapemptikoColKey>({
+      allKeys: PARAP_ALL_KEYS,
+      defaultVisible: PARAP_DEFAULT_VISIBLE,
+      storageKeyBase: "parapemptiko_table_visible_cols_v1",
+      tenantId,
+    });
 
   const PARAP_SELECT =
     "id,tenant_id,title,doc_opinion_id,code,code_diagnosis,start_date,end_date,status,notes,created_at,updated_at";
@@ -133,31 +176,30 @@ export default function ParapemptikaPage() {
   }, [user?.id]);
 
   async function fetchDocOpinions(tid: string) {
-  const SELECT =
-    "id,student_id,start_date,end_date, student:students(name,lastname)";
+    const SELECT =
+      "id,student_id,start_date,end_date, student:students(name,lastname)";
 
-  const { data, error } = await supabase
-    .from("doc_opinion")
-    .select(SELECT)
-    .eq("tenant_id", tid)
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("doc_opinion")
+      .select(SELECT)
+      .eq("tenant_id", tid)
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    setError(error.message);
-    setDocOpinions([]);
-    return;
+    if (error) {
+      setError(error.message);
+      setDocOpinions([]);
+      return;
+    }
+
+    const transformed = (data ?? []).map((item: any) => ({
+      ...item,
+      student: Array.isArray(item.student)
+        ? item.student[0] ?? null
+        : item.student ?? null,
+    })) as DocOpinionRow[];
+
+    setDocOpinions(transformed);
   }
-
-  const transformed = (data ?? []).map((item: any) => ({
-    ...item,
-    // ✅ αν το supabase γυρίζει array, παίρνουμε το πρώτο
-    student: Array.isArray(item.student)
-      ? item.student[0] ?? null
-      : item.student ?? null,
-  })) as DocOpinionRow[];
-
-  setDocOpinions(transformed);
-}
 
   async function fetchParapemtika(tid: string, p = page, q = query) {
     setLoading(true);
@@ -208,6 +250,61 @@ export default function ParapemptikaPage() {
     fetchParapemtika(tenantId, 1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, tenantId]);
+
+  async function bulkDelete() {
+    if (!tenantId || selectedIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await callFunction("parapemptiko-bulk-delete", { ids: selectedIds });
+      const deletedCount = selectedIds.length;
+      clearSelection();
+      setBulkDeleteOpen(false);
+      const newTotal = Math.max(0, total - deletedCount);
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      const nextPage = Math.min(page, newTotalPages);
+      setPage(nextPage);
+      fetchParapemtika(tenantId, nextPage, query);
+    } catch (e: any) {
+      setError(e?.message ?? "Σφάλμα διαγραφής.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  async function exportExcel() {
+    if (!tenantId) return;
+
+    const { data, error } = await supabase
+      .from("parapemtiko")
+      .select(PARAP_SELECT)
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return;
+
+    const allRows = (data ?? []) as ParapemtikoRow[];
+
+    const exportData = allRows.map((r) => {
+      const obj: Record<string, any> = { Τίτλος: r.title };
+      if (isColVisible("code")) obj["Κωδικός"] = r.code ?? "";
+      if (isColVisible("code_diagnosis")) obj["Κωδ. Διάγνωσης"] = r.code_diagnosis ?? "";
+      if (isColVisible("start_date")) obj["Έναρξη"] = r.start_date;
+      if (isColVisible("end_date")) obj["Λήξη"] = r.end_date ?? "";
+      if (isColVisible("status")) obj["Status"] = r.status;
+      if (isColVisible("notes")) obj["Σημειώσεις"] = r.notes ?? "";
+      if (isColVisible("created_at")) obj["Ημ. Δημιουργίας"] = r.created_at?.slice(0, 10) ?? "";
+      return obj;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Παραπεμπτικά");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `parapemptika_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -348,23 +445,59 @@ export default function ParapemptikaPage() {
 
   return (
     <div className="rounded-2xl border border-border bg-panel p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-base font-semibold">Παραπεμπτικά</div>
           <div className="text-xs text-muted">Διαχείριση παραπεμπτικών</div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             className="input w-full sm:w-72"
             placeholder="Αναζήτηση (τίτλος, κωδικοί, status...)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <StudentsColumnsDropdown
+            columns={PARAP_ALL_COLUMNS}
+            isColVisible={isColVisible}
+            toggleCol={toggleCol}
+            setAllCols={setAllCols}
+            resetCols={resetCols}
+          />
           <button className="btn btn-primary" onClick={openCreate}>
             + Προσθήκη παραπεμπτικού
           </button>
         </div>
+      </div>
+
+      <div className="mt-2 mb-1 flex flex-wrap items-center gap-2">
+        <button
+          className="h-9 rounded-md px-3 text-sm border border-border/15 inline-flex items-center gap-2 text-text-primary hover:bg-[#26a347] hover:border-white/15 hover:text-white cursor-pointer"
+          onClick={exportExcel}
+          disabled={loading || total === 0}
+          title="Export Excel"
+        >
+          <Sheet className="h-4 w-4" />
+          Εξαγωγή Excel
+        </button>
+
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">
+              Επιλεγμένα: <span className="font-semibold text-text">{selectedIds.length}</span>{" "}
+              <button type="button" className="underline" onClick={clearSelection}>(καθαρισμός)</button>
+            </span>
+            <button
+              type="button"
+              className="h-8 rounded-md px-3 text-xs border border-red-400/60 text-red-400 hover:bg-red-500/10 inline-flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Διαγραφή επιλεγμένων
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -373,12 +506,17 @@ export default function ParapemptikaPage() {
         </div>
       )}
 
-<ParapemptikoTable
-  rows={rows}
-  loading={loading}
-  onEdit={openEdit}
-  onDelete={askDelete}
-/>
+      <ParapemptikoTable
+        rows={rows}
+        loading={loading}
+        onEdit={openEdit}
+        onDelete={askDelete}
+        isColVisible={isColVisible}
+        selectedIds={selectedIds}
+        toggleSelect={toggleSelect}
+        allPageSelected={allPageSelected}
+        toggleSelectPage={toggleSelectPage}
+      />
 
       {/* Pagination */}
       <div className="mt-3 flex items-center justify-between text-sm">
@@ -407,6 +545,15 @@ export default function ParapemptikaPage() {
           </button>
         </div>
       </div>
+
+      <BulkDeleteConfirmModal
+        open={bulkDeleteOpen}
+        count={selectedIds.length}
+        entityLabel="παραπεμπτικά"
+        busy={bulkDeleting}
+        onConfirm={bulkDelete}
+        onClose={() => setBulkDeleteOpen(false)}
+      />
 
       {/* Create / Edit Modal */}
       <ParapemptikoModal
@@ -437,17 +584,17 @@ export default function ParapemptikaPage() {
             >
               <option value="">— Επιλογή —</option>
               {docOpinions.map((d) => {
-  const fullName =
-    d.student?.lastname || d.student?.name
-      ? `${d.student?.lastname ?? ""} ${d.student?.name ?? ""}`.trim()
-      : d.student_id;
+                const fullName =
+                  d.student?.lastname || d.student?.name
+                    ? `${d.student?.lastname ?? ""} ${d.student?.name ?? ""}`.trim()
+                    : d.student_id;
 
-  return (
-    <option key={d.id} value={d.id}>
-      {fullName} — {d.start_date} → {d.end_date ?? "…"}
-    </option>
-  );
-})}
+                return (
+                  <option key={d.id} value={d.id}>
+                    {fullName} — {d.start_date} → {d.end_date ?? "…"}
+                  </option>
+                );
+              })}
             </select>
 
             <div className="mt-1 text-[11px] text-muted">
