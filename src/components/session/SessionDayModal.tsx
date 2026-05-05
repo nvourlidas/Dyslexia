@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { Loader2, Trash2, Check, X, Pencil, Printer } from "lucide-react";
 import { PALETTE, toTimeStr } from "@/lib/session.utils";
-import { TIME_SLOTS } from "@/lib/timeSlots";
 import SessionPdfPreviewModal from "@/components/session/SessionPdfPreviewModal";
 import type {
   ClassSession, TeacherDayGroup, TeacherOption, StudentOption, AttendanceStatus,
@@ -79,7 +78,7 @@ function SlotRow({ session, students, onAttendance, onEditStudent, onDelete }: {
   );
 }
 
-function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSession, onAddSlot, onRemoveTeacher }: {
+function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSession, onAddSlot, onRemoveTeacher, onLastSlotDeleted }: {
   group: TeacherDayGroup;
   students: StudentOption[];
   onAttendance: (sessionId: string, status: AttendanceStatus) => Promise<void>;
@@ -87,12 +86,19 @@ function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSe
   onDeleteSession: (sessionId: string) => Promise<void>;
   onAddSlot: (teacherId: string, startTime: string, endTime: string, studentId: string) => Promise<void>;
   onRemoveTeacher: (teacherId: string) => void;
+  onLastSlotDeleted: () => void;
 }) {
   const col = PALETTE[group.colorIdx];
-  const usedSlots = new Set(group.slots.map((s) => toTimeStr(s.starts_at)));
-  const [selectedSlotIdx, setSelectedSlotIdx] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [newStudent, setNewStudent] = useState("");
   const [addBusy, setAddBusy] = useState(false);
+
+  const handleSlotDelete = async (sessionId: string) => {
+    const wasLast = group.slots.length === 1;
+    await onDeleteSession(sessionId);
+    if (wasLast) onLastSlotDeleted();
+  };
 
   return (
     <div className="rounded-lg border border-border/15 overflow-hidden mb-3">
@@ -120,20 +126,28 @@ function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSe
       )}
       {group.slots.map((s) => (
         <SlotRow key={s.id} session={s} students={students}
-          onAttendance={onAttendance} onEditStudent={onEditStudent} onDelete={onDeleteSession} />
+          onAttendance={onAttendance} onEditStudent={onEditStudent} onDelete={handleSlotDelete} />
       ))}
 
       <div className="flex items-center gap-2 px-3 py-2 border-t border-border/10 bg-panel/30 flex-wrap">
         <span className="text-xs text-muted shrink-0">Νέο slot:</span>
-        <select className="input text-xs py-1" style={{ minWidth: "155px" }}
-          value={selectedSlotIdx} onChange={(e) => setSelectedSlotIdx(e.target.value)}>
-          <option value="">— Επιλογή ώρας —</option>
-          {TIME_SLOTS.map((slot, i) => (
-            <option key={i} value={i} disabled={usedSlots.has(slot.start)}>
-              {slot.label}{usedSlots.has(slot.start) ? "  ✓" : ""}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1">
+          <input
+            type="time"
+            className="input text-xs py-1 w-28"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            title="Ώρα έναρξης"
+          />
+          <span className="text-xs text-muted">—</span>
+          <input
+            type="time"
+            className="input text-xs py-1 w-28"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            title="Ώρα λήξης"
+          />
+        </div>
         <select className="input text-xs py-1 flex-1 min-w-32" value={newStudent} onChange={(e) => setNewStudent(e.target.value)}>
           <option value="">— Μαθητής (προαιρετικό) —</option>
           {students.map((s) => <option key={s.user_id} value={s.user_id}>{s.lastname} {s.name}</option>)}
@@ -141,11 +155,11 @@ function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSe
         <button
           className="btn btn-primary text-xs py-1 px-3 shrink-0 disabled:opacity-50 inline-flex items-center gap-1"
           onClick={async () => {
-            if (!selectedSlotIdx && selectedSlotIdx !== "0") { alert("Επίλεξε ώρα."); return; }
-            const slot = TIME_SLOTS[Number(selectedSlotIdx)];
+            if (!startTime || !endTime) { alert("Συμπλήρωσε ώρα έναρξης και λήξης."); return; }
+            if (startTime >= endTime) { alert("Η ώρα λήξης πρέπει να είναι μετά την έναρξη."); return; }
             setAddBusy(true);
-            await onAddSlot(group.teacher_id, slot.start, slot.end, newStudent);
-            setSelectedSlotIdx(""); setNewStudent(""); setAddBusy(false);
+            await onAddSlot(group.teacher_id, startTime, endTime, newStudent);
+            setStartTime(""); setEndTime(""); setNewStudent(""); setAddBusy(false);
           }}
           disabled={addBusy}
         >
@@ -221,14 +235,19 @@ export default function SessionDayModal({ open, dateKey, groups, teachers, stude
               <TeacherBlock key={g.teacher_id} group={g} students={students}
                 onAttendance={onAttendance} onEditStudent={onEditStudent} onDeleteSession={onDeleteSession}
                 onAddSlot={(tid, start, end, student) => handleAddSlot(tid, start, end, student, g.colorIdx)}
-                onRemoveTeacher={onRemoveTeacher} />
+                onRemoveTeacher={onRemoveTeacher}
+                onLastSlotDeleted={() => {
+                  const teacher = teachers.find((t) => t.id === g.teacher_id);
+                  if (teacher) setPending((prev) => [...prev, { teacher, colorIdx: g.colorIdx }]);
+                }} />
             ))}
             {pending.map((p) => (
               <TeacherBlock key={p.teacher.id}
                 group={{ teacher_id: p.teacher.id, teacher_name: `${p.teacher.last_name} ${p.teacher.name}`, colorIdx: p.colorIdx, slots: [] }}
                 students={students} onAttendance={onAttendance} onEditStudent={onEditStudent} onDeleteSession={onDeleteSession}
                 onAddSlot={(tid, start, end, student) => handleAddSlot(tid, start, end, student, p.colorIdx)}
-                onRemoveTeacher={() => setPending((prev) => prev.filter((x) => x.teacher.id !== p.teacher.id))} />
+                onRemoveTeacher={() => setPending((prev) => prev.filter((x) => x.teacher.id !== p.teacher.id))}
+                onLastSlotDeleted={() => {}} />
             ))}
             {!addOpen ? (
               <button className="w-full py-2.5 border border-dashed border-border/30 rounded-lg text-sm text-muted hover:bg-panel2 transition-colors"
