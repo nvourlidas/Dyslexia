@@ -157,6 +157,7 @@ export default function DocOpinionPage() {
       .from("students")
       .select("user_id,name,lastname")
       .eq("tenant_id", tid)
+      .eq("active", true)
       .order("lastname", { ascending: true });
 
     if (error) {

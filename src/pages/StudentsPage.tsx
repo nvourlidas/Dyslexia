@@ -128,6 +128,8 @@ export default function StudentsPage() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sortAlpha, setSortAlpha] = useState<"asc" | "desc" | null>(null);
 
 
 
@@ -165,22 +167,41 @@ export default function StudentsPage() {
 
 
   const filtered = useMemo(() => {
-    if (!q) return rows;
-    const needle = q.toLowerCase();
-    return rows.filter((r) => {
-      const full = `${r.lastname ?? ""} ${r.name ?? ""}`.trim().toLowerCase();
-      return (
-        full.includes(needle) ||
-        (r.phone ?? "").toLowerCase().includes(needle) ||
-        (r.email ?? "").toLowerCase().includes(needle) ||
-        (r.amka ?? "").toLowerCase().includes(needle) ||
-        (r.city ?? "").toLowerCase().includes(needle) ||
-        r.user_id.toLowerCase().includes(needle)
-      );
-    });
-  }, [rows, q]);
+    let result = rows;
 
-  useEffect(() => setPage(1), [q, pageSize]);
+    // text search
+    if (q) {
+      const needle = q.toLowerCase();
+      result = result.filter((r) => {
+        const full = `${r.lastname ?? ""} ${r.name ?? ""}`.trim().toLowerCase();
+        return (
+          full.includes(needle) ||
+          (r.phone ?? "").toLowerCase().includes(needle) ||
+          (r.email ?? "").toLowerCase().includes(needle) ||
+          (r.amka ?? "").toLowerCase().includes(needle) ||
+          (r.city ?? "").toLowerCase().includes(needle) ||
+          r.user_id.toLowerCase().includes(needle)
+        );
+      });
+    }
+
+    // active filter
+    if (activeFilter === "active") result = result.filter((r) => r.active === true);
+    else if (activeFilter === "inactive") result = result.filter((r) => !r.active);
+
+    // alphabetical sort
+    if (sortAlpha) {
+      result = [...result].sort((a, b) => {
+        const nameA = `${a.lastname ?? ""} ${a.name ?? ""}`.trim().toLowerCase();
+        const nameB = `${b.lastname ?? ""} ${b.name ?? ""}`.trim().toLowerCase();
+        return sortAlpha === "asc" ? nameA.localeCompare(nameB, "el") : nameB.localeCompare(nameA, "el");
+      });
+    }
+
+    return result;
+  }, [rows, q, activeFilter, sortAlpha]);
+
+  useEffect(() => setPage(1), [q, pageSize, activeFilter, sortAlpha]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(() => {
@@ -260,6 +281,36 @@ export default function StudentsPage() {
     });
 
     doc.save(`students_${new Date().toISOString().slice(0, 10)}.pdf`);
+  }
+
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
+
+  async function handleToggleActive(s: StudentRow) {
+    if (togglingActiveId) return;
+    setTogglingActiveId(s.user_id);
+    const newActive = !s.active;
+    // optimistic update
+    setRows((prev) =>
+      prev.map((r) => (r.user_id === s.user_id ? { ...r, active: newActive } : r))
+    );
+    try {
+      await callFunction("student-update", {
+        user_id: s.user_id,
+        active: newActive,
+      });
+      pushToast({
+        variant: "success",
+        title: newActive ? "Μαθητής ενεργοποιήθηκε" : "Μαθητής απενεργοποιήθηκε",
+      });
+    } catch (e: any) {
+      // rollback on error
+      setRows((prev) =>
+        prev.map((r) => (r.user_id === s.user_id ? { ...r, active: s.active } : r))
+      );
+      pushToast({ variant: "error", title: "Σφάλμα ενημέρωσης", message: e?.message });
+    } finally {
+      setTogglingActiveId(null);
+    }
   }
 
   // create/edit modal submit
@@ -410,8 +461,8 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* exports (same UI as MembersPage) */}
-      <div className="mb-2 flex gap-2">
+      {/* exports + filters */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <button
           className="h-9 rounded-md px-3 text-sm border border-border/15 inline-flex items-center gap-2 text-text-primary hover:bg-[#26a347] hover:border-white/15 hover:text-white cursor-pointer"
           onClick={() => exportExcel()}
@@ -431,6 +482,30 @@ export default function StudentsPage() {
           <FileText className="h-4 w-4" />
           Εξαγωγή PDF
         </button>
+
+        <div className="w-px h-5 bg-border/20" />
+
+        {/* Active filter dropdown */}
+        <select
+          className="h-9 rounded-md border border-border/15 bg-panel2 px-2 text-sm text-text cursor-pointer"
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "inactive")}
+        >
+          <option value="all">Κατάσταση: Όλοι</option>
+          <option value="active">Ενεργοί</option>
+          <option value="inactive">Ανενεργοί</option>
+        </select>
+
+        {/* Alpha sort dropdown */}
+        <select
+          className="h-9 rounded-md border border-border/15 bg-panel2 px-2 text-sm text-text cursor-pointer"
+          value={sortAlpha ?? ""}
+          onChange={(e) => setSortAlpha((e.target.value as "asc" | "desc") || null)}
+        >
+          <option value="">Ταξινόμηση: Προεπιλογή</option>
+          <option value="asc">Αλφαβητικά Α→Ω</option>
+          <option value="desc">Αλφαβητικά Ω→Α</option>
+        </select>
       </div>
 
       <StudentsTable
@@ -454,6 +529,8 @@ export default function StudentsPage() {
         setPageSize={setPageSize}
         onEdit={openEdit}
         onDeleted={load}
+        onToggleActive={handleToggleActive}
+        togglingActiveId={togglingActiveId}
         formatDateDMY={formatDateDMY}
       />
 

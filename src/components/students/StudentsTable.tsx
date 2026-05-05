@@ -3,7 +3,6 @@ import type { LucideIcon } from "lucide-react";
 import { Eye, Pencil } from "lucide-react";
 import { Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-
 import type { StudentRow, ColumnKey } from "@/types/student";
 
 
@@ -35,6 +34,42 @@ function IconButton({
     >
       <Icon className="h-4 w-4" />
       <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
+function ActiveToggle({
+  active,
+  busy,
+  onToggle,
+}: {
+  active: boolean | null;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      disabled={busy}
+      title={active ? "Ενεργός — κλικ για απενεργοποίηση" : "Ανενεργός — κλικ για ενεργοποίηση"}
+      className={[
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors focus:outline-none disabled:opacity-50",
+        active ? "bg-green-500 border-green-600" : "bg-muted/30 border-border/20",
+      ].join(" ")}
+      aria-checked={active ?? false}
+      role="switch"
+    >
+      {busy ? (
+        <Loader2 className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-spin text-white" />
+      ) : (
+        <span
+          className={[
+            "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+            active ? "translate-x-[18px]" : "translate-x-[2px]",
+          ].join(" ")}
+        />
+      )}
     </button>
   );
 }
@@ -117,6 +152,8 @@ export default function StudentsTable({
   // actions
   onEdit,
   onDeleted,
+  onToggleActive,
+  togglingActiveId,
   formatDateDMY,
 }: {
   tenantId: string | null;
@@ -144,6 +181,8 @@ export default function StudentsTable({
 
   onEdit: (s: StudentRow) => void;
   onDeleted: () => void;
+  onToggleActive: (s: StudentRow) => void;
+  togglingActiveId: string | null;
 
   formatDateDMY: (value: string | null | undefined) => string;
 }) {
@@ -180,6 +219,7 @@ export default function StudentsTable({
                 {isColVisible("doctor_name") && <Th>Γιατρός</Th>}
                 {isColVisible("created_at") && <Th>Ημ. Δημιουργίας</Th>}
 
+                <Th>Κατάσταση</Th>
                 <Th className="text-right pr-3">Ενέργειες</Th>
               </tr>
             </thead>
@@ -222,9 +262,6 @@ export default function StudentsTable({
 
                       <Td>
                         <div className="font-medium">{fullName}</div>
-                        <div className="text-xs text-muted">
-                          {s.active ? "Active" : "Inactive"}
-                        </div>
                       </Td>
 
                       <Td>{s.phone ?? "—"}</Td>
@@ -243,6 +280,19 @@ export default function StudentsTable({
                       )}
                       {isColVisible("doctor_name") && <Td>{s.doctor_name ?? "—"}</Td>}
                       {isColVisible("created_at") && <Td>{formatDateDMY(s.created_at)}</Td>}
+
+                      <Td>
+                        <div className="flex items-center gap-1.5">
+                          <ActiveToggle
+                            active={s.active}
+                            busy={togglingActiveId === s.user_id}
+                            onToggle={() => onToggleActive(s)}
+                          />
+                          <span className={`text-xs ${s.active ? "text-green-500" : "text-muted"}`}>
+                            {s.active ? "Ενεργός" : "Ανενεργός"}
+                          </span>
+                        </div>
+                      </Td>
 
                       <Td className="text-right space-x-1 pr-3">
                         <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(s)} />
@@ -283,6 +333,16 @@ export default function StudentsTable({
                     <div>
                       <div className="font-medium text-sm">{fullName}</div>
                       <div className="text-xs text-muted">{s.phone ?? "—"}</div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <ActiveToggle
+                          active={s.active}
+                          busy={togglingActiveId === s.user_id}
+                          onToggle={() => onToggleActive(s)}
+                        />
+                        <span className={`text-xs ${s.active ? "text-green-500" : "text-muted"}`}>
+                          {s.active ? "Ενεργός" : "Ανενεργός"}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
