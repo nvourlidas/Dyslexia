@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { student_id, start_date, end_date, notes } = payload ?? {};
+  const { student_id, start_date, end_date, notes, status, parapemptiko_ids } = payload ?? {};
 
   if (!student_id || !start_date) {
     return withCors(
@@ -79,8 +79,8 @@ Deno.serve(async (req) => {
     start_date: String(start_date),
     end_date: end_date ? String(end_date) : null,
     notes: notes ? String(notes).trim() : null,
+    status: status === "completed" ? "completed" : "pending",
     created_at: new Date().toISOString(),
-    
   };
 
   console.log("INSERTING doc_opinion...", JSON.stringify(insertPayload));
@@ -93,6 +93,24 @@ Deno.serve(async (req) => {
       { status: 400, headers: { "Content-Type": "application/json" } },
       req,
     );
+  }
+
+  // Link parapemptika to this doc_opinion
+  const ids = Array.isArray(parapemptiko_ids) ? parapemptiko_ids.filter(Boolean) : [];
+  if (ids.length > 0) {
+    const { error: linkErr } = await admin
+      .from("parapemtiko")
+      .update({ doc_opinion_id: newId })
+      .eq("tenant_id", caller.tenantId)
+      .in("id", ids);
+
+    if (linkErr) {
+      return withCors(
+        JSON.stringify({ ok: false, error: { code: "LINK_FAILED", message: linkErr.message } }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+        req,
+      );
+    }
   }
 
   return withCors(

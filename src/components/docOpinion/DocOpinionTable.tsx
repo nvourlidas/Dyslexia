@@ -7,16 +7,28 @@ export type DocOpinionRow = {
   start_date: string;
   end_date: string | null;
   notes: string | null;
+  status: string;
   created_at: string;
   updated_at: string;
 
   student?: {
     name: string | null;
     lastname: string | null;
+    amka: string | null;
   } | null;
+
+  parapemptika?: { code: string | null; code_diagnosis: string | null }[] | null;
 };
 
-export type DocOpinionColKey = "start_date" | "end_date" | "notes" | "created_at";
+export type DocOpinionColKey =
+  | "start_date"
+  | "end_date"
+  | "notes"
+  | "created_at"
+  | "amka"
+  | "code"
+  | "code_diagnosis"
+  | "status";
 
 type Props = {
   rows: DocOpinionRow[];
@@ -74,6 +86,10 @@ export default function DocOpinionTable({
                 />
               </th>
               <th className="px-3 py-3">Μαθητής</th>
+              {show("amka") && <th className="px-3 py-3">ΑΜΚΑ</th>}
+              <th className="px-3 py-3">Κατάσταση</th>
+              {show("code") && <th className="px-3 py-3">Κωδικοί</th>}
+              {show("code_diagnosis") && <th className="px-3 py-3">Κωδ. Διάγνωσης</th>}
               {show("start_date") && <th className="px-3 py-3">Έναρξη</th>}
               {show("end_date") && <th className="px-3 py-3">Λήξη</th>}
               {show("notes") && <th className="px-3 py-3">Σημειώσεις</th>}
@@ -89,6 +105,16 @@ export default function DocOpinionTable({
                   ? `${r.student?.lastname ?? ""} ${r.student?.name ?? ""}`.trim()
                   : r.student_id;
 
+              const codes = (r.parapemptika ?? [])
+                .map((p) => p.code)
+                .filter(Boolean)
+                .join(", ");
+
+              const codeDiagnoses = (r.parapemptika ?? [])
+                .map((p) => p.code_diagnosis)
+                .filter(Boolean)
+                .join(", ");
+
               return (
                 <tr
                   key={r.id}
@@ -103,6 +129,20 @@ export default function DocOpinionTable({
                     />
                   </td>
                   <td className="px-3 py-3 font-medium">{fullName}</td>
+                  {show("amka") && <td className="px-3 py-3 text-muted">{r.student?.amka ?? "-"}</td>}
+                  <td className="px-3 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        r.status === "completed"
+                          ? "bg-green-500/15 text-green-400"
+                          : "bg-yellow-500/15 text-yellow-400"
+                      }`}
+                    >
+                      {r.status === "completed" ? "Ολοκληρωμένη" : "Εκκρεμεί"}
+                    </span>
+                  </td>
+                  {show("code") && <td className="px-3 py-3">{codes || "-"}</td>}
+                  {show("code_diagnosis") && <td className="px-3 py-3">{codeDiagnoses || "-"}</td>}
                   {show("start_date") && <td className="px-3 py-3">{r.start_date}</td>}
                   {show("end_date") && <td className="px-3 py-3">{r.end_date ?? "-"}</td>}
                   {show("notes") && <td className="px-3 py-3">{r.notes ? r.notes.slice(0, 60) : "-"}</td>}

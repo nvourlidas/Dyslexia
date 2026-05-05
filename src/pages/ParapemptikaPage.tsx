@@ -19,17 +19,11 @@ import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
-type DocOpinionRow = {
-  id: string;
-  student_id: string;
-  start_date: string;
-  end_date: string | null;
-  student?: { name: string | null; lastname: string | null } | null;
-};
+type StudentOption = { user_id: string; name: string | null; lastname: string | null; amka: string | null };
 
 type ParapemtikoForm = {
   title: string;
-  doc_opinion_id: string;
+  student_id: string;
   code: string;
   code_diagnosis: string;
   start_date: string;
@@ -40,26 +34,26 @@ type ParapemtikoForm = {
 
 const EMPTY_FORM: ParapemtikoForm = {
   title: "",
-  doc_opinion_id: "",
+  student_id: "",
   code: "",
   code_diagnosis: "",
   start_date: "",
   end_date: "",
-  status: "active",
+  status: "pending",
   notes: "",
 };
 
 const PARAP_ALL_COLUMNS: { key: ParapemptikoColKey; label: string }[] = [
+  { key: "amka", label: "ΑΜΚΑ" },
   { key: "code", label: "Κωδικός" },
   { key: "code_diagnosis", label: "Κωδ. Διάγνωσης" },
   { key: "start_date", label: "Έναρξη" },
   { key: "end_date", label: "Λήξη" },
-  { key: "status", label: "Status" },
   { key: "notes", label: "Σημειώσεις" },
   { key: "created_at", label: "Ημ. Δημιουργίας" },
 ];
 
-const PARAP_DEFAULT_VISIBLE: ParapemptikoColKey[] = ["start_date", "end_date", "status"];
+const PARAP_DEFAULT_VISIBLE: ParapemptikoColKey[] = ["amka", "code", "code_diagnosis", "end_date"];
 
 const PARAP_ALL_KEYS = PARAP_ALL_COLUMNS.map((c) => c.key) as ParapemptikoColKey[];
 
@@ -79,12 +73,12 @@ function toForm(r?: ParapemtikoRow | null): ParapemtikoForm {
   if (!r) return { ...EMPTY_FORM };
   return {
     title: r.title ?? "",
-    doc_opinion_id: r.doc_opinion_id ?? "",
+    student_id: r.student_id ?? "",
     code: r.code ?? "",
     code_diagnosis: r.code_diagnosis ?? "",
     start_date: r.start_date ?? "",
     end_date: r.end_date ?? "",
-    status: r.status ?? "active",
+    status: r.status ?? "pending",
     notes: r.notes ?? "",
   };
 }
@@ -92,7 +86,7 @@ function toForm(r?: ParapemtikoRow | null): ParapemtikoForm {
 function formToDb(f: ParapemtikoForm) {
   return {
     title: f.title.trim(),
-    doc_opinion_id: f.doc_opinion_id,
+    student_id: f.student_id || null,
     code: f.code.trim() || null,
     code_diagnosis: f.code_diagnosis.trim() || null,
     start_date: f.start_date,
@@ -115,7 +109,12 @@ export default function ParapemptikaPage() {
   const [rows, setRows] = useState<ParapemtikoRow[]>([]);
   const [query, setQuery] = useState("");
 
-  const [docOpinions, setDocOpinions] = useState<DocOpinionRow[]>([]);
+  const [students, setStudents] = useState<StudentOption[]>([]);
+  const [recordStudentIds, setRecordStudentIds] = useState<Set<string>>(new Set());
+
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
+  const [amkaFilter, setAmkaFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState<"all" | "expired" | "active" | "none">("all");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ParapemtikoRow | null>(null);
@@ -155,7 +154,7 @@ export default function ParapemptikaPage() {
     });
 
   const PARAP_SELECT =
-    "id,tenant_id,title,doc_opinion_id,code,code_diagnosis,start_date,end_date,status,notes,created_at,updated_at";
+    "id,tenant_id,title,student_id,doc_opinion_id,code,code_diagnosis,start_date,end_date,status,notes,created_at,updated_at,student:students(name,lastname,amka)";
 
   useEffect(() => {
     let cancelled = false;
@@ -175,33 +174,44 @@ export default function ParapemptikaPage() {
     };
   }, [user?.id]);
 
-  async function fetchDocOpinions(tid: string) {
-    const SELECT =
-      "id,student_id,start_date,end_date, student:students(name,lastname)";
-
+  async function fetchStudents(tid: string) {
     const { data, error } = await supabase
-      .from("doc_opinion")
-      .select(SELECT)
+      .from("students")
+      .select("user_id,name,lastname,amka")
       .eq("tenant_id", tid)
-      .order("created_at", { ascending: false });
+      .eq("active", true)
+      .order("lastname", { ascending: true });
 
-    if (error) {
-      setError(error.message);
-      setDocOpinions([]);
-      return;
-    }
+    if (error) { setError(error.message); return; }
+    setStudents((data ?? []) as StudentOption[]);
+  }
 
-    const transformed = (data ?? []).map((item: any) => ({
+  async function fetchRecordStudentIds(tid: string) {
+    const { data } = await supabase
+      .from("parapemtiko")
+      .select("student_id")
+      .eq("tenant_id", tid)
+      .not("student_id", "is", null);
+    setRecordStudentIds(new Set((data ?? []).map((r: any) => r.student_id)));
+  }
+
+  function normalizeParapemtika(data: any[]): ParapemtikoRow[] {
+    return data.map((item) => ({
       ...item,
       student: Array.isArray(item.student)
         ? item.student[0] ?? null
         : item.student ?? null,
-    })) as DocOpinionRow[];
-
-    setDocOpinions(transformed);
+    })) as ParapemtikoRow[];
   }
 
-  async function fetchParapemtika(tid: string, p = page, q = query) {
+  async function fetchParapemtika(
+    tid: string,
+    p = page,
+    q = query,
+    sf = statusFilter,
+    af = amkaFilter,
+    edf = endDateFilter
+  ) {
     setLoading(true);
     setError(null);
 
@@ -217,9 +227,17 @@ export default function ParapemptikaPage() {
     if (qq) {
       const safe = qq.replace(/,/g, " ");
       req = req.or(
-        `title.ilike.%${safe}%,code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%,status.ilike.%${safe}%`
+        `title.ilike.%${safe}%,code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`
       );
     }
+
+    if (sf !== "all") req = req.eq("status", sf);
+    if (af) req = req.eq("student_id", af);
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (edf === "expired") req = req.not("end_date", "is", null).lt("end_date", today);
+    if (edf === "active") req = req.or(`end_date.is.null,end_date.gte.${today}`);
+    if (edf === "none") req = req.is("end_date", null);
 
     const { data, error, count } = await req
       .order("created_at", { ascending: false })
@@ -230,7 +248,7 @@ export default function ParapemptikaPage() {
       setRows([]);
       setTotal(0);
     } else {
-      setRows((data ?? []) as ParapemtikoRow[]);
+      setRows(normalizeParapemtika(data ?? []));
       setTotal(count ?? 0);
     }
 
@@ -239,7 +257,8 @@ export default function ParapemptikaPage() {
 
   useEffect(() => {
     if (!tenantId) return;
-    fetchDocOpinions(tenantId);
+    fetchStudents(tenantId);
+    fetchRecordStudentIds(tenantId);
     fetchParapemtika(tenantId, page, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, page]);
@@ -250,6 +269,13 @@ export default function ParapemptikaPage() {
     fetchParapemtika(tenantId, 1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, tenantId]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    setPage(1);
+    fetchParapemtika(tenantId, 1, query, statusFilter, amkaFilter, endDateFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, amkaFilter, endDateFilter]);
 
   async function bulkDelete() {
     if (!tenantId || selectedIds.length === 0) return;
@@ -282,15 +308,16 @@ export default function ParapemptikaPage() {
 
     if (error || !data) return;
 
-    const allRows = (data ?? []) as ParapemtikoRow[];
+    const allRows = normalizeParapemtika(data ?? []);
 
     const exportData = allRows.map((r) => {
-      const obj: Record<string, any> = { Τίτλος: r.title };
+      const statusLabel = r.status === "completed" ? "Ολοκληρωμένο" : "Εκκρεμεί";
+      const obj: Record<string, any> = { Τίτλος: r.title, Κατάσταση: statusLabel };
+      if (isColVisible("amka")) obj["ΑΜΚΑ"] = r.student?.amka ?? "";
       if (isColVisible("code")) obj["Κωδικός"] = r.code ?? "";
       if (isColVisible("code_diagnosis")) obj["Κωδ. Διάγνωσης"] = r.code_diagnosis ?? "";
       if (isColVisible("start_date")) obj["Έναρξη"] = r.start_date;
       if (isColVisible("end_date")) obj["Λήξη"] = r.end_date ?? "";
-      if (isColVisible("status")) obj["Status"] = r.status;
       if (isColVisible("notes")) obj["Σημειώσεις"] = r.notes ?? "";
       if (isColVisible("created_at")) obj["Ημ. Δημιουργίας"] = r.created_at?.slice(0, 10) ?? "";
       return obj;
@@ -334,10 +361,8 @@ export default function ParapemptikaPage() {
 
   function validate(f: ParapemtikoForm) {
     if (!f.title.trim()) return "Ο τίτλος είναι υποχρεωτικός.";
-    if (!f.doc_opinion_id)
-      return "Πρέπει να επιλέξεις Γνωμάτευση (doc_opinion).";
+    if (!f.student_id) return "Πρέπει να επιλέξεις μαθητή.";
     if (!f.start_date) return "Η ημ/νία έναρξης είναι υποχρεωτική.";
-    if (!f.status.trim()) return "Το status είναι υποχρεωτικό.";
     return null;
   }
 
@@ -369,7 +394,7 @@ export default function ParapemptikaPage() {
 
         if (error) throw error;
 
-        setRows((prev) => [inserted as ParapemtikoRow, ...prev]);
+        setRows((prev) => [normalizeParapemtika([inserted])[0], ...prev]);
         setTotal((t) => t + 1);
         setPage(1);
 
@@ -390,7 +415,7 @@ export default function ParapemptikaPage() {
 
         setRows((prev) =>
           prev.map((x) =>
-            x.id === editing.id ? (updated as ParapemtikoRow) : x
+            x.id === editing.id ? normalizeParapemtika([updated])[0] : x
           )
         );
 
@@ -481,6 +506,42 @@ export default function ParapemptikaPage() {
           <Sheet className="h-4 w-4" />
           Εξαγωγή Excel
         </button>
+
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+        >
+          <option value="all">Κατάσταση: Όλες</option>
+          <option value="pending">Εκκρεμεί</option>
+          <option value="completed">Ολοκληρωμένο</option>
+        </select>
+
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={amkaFilter}
+          onChange={(e) => setAmkaFilter(e.target.value)}
+        >
+          <option value="">ΑΜΚΑ: Όλα</option>
+          {students
+            .filter((s) => s.amka && recordStudentIds.has(s.user_id))
+            .map((s) => (
+              <option key={s.user_id} value={s.user_id}>
+                {s.amka} — {`${s.lastname ?? ""} ${s.name ?? ""}`.trim()}
+              </option>
+            ))}
+        </select>
+
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={endDateFilter}
+          onChange={(e) => setEndDateFilter(e.target.value as typeof endDateFilter)}
+        >
+          <option value="all">Λήξη: Όλες</option>
+          <option value="expired">Ληγμένα</option>
+          <option value="active">Ενεργά</option>
+          <option value="none">Χωρίς λήξη</option>
+        </select>
 
         {selectedIds.length > 0 && (
           <div className="flex items-center gap-2">
@@ -574,32 +635,19 @@ export default function ParapemptikaPage() {
           </div>
 
           <div className="md:col-span-2">
-            <div className="mb-1 text-xs text-muted">
-              Γνωμάτευση (doc_opinion) *
-            </div>
+            <div className="mb-1 text-xs text-muted">Μαθητής *</div>
             <select
               className="input"
-              value={form.doc_opinion_id}
-              onChange={(e) => setField("doc_opinion_id", e.target.value)}
+              value={form.student_id}
+              onChange={(e) => setField("student_id", e.target.value)}
             >
               <option value="">— Επιλογή —</option>
-              {docOpinions.map((d) => {
-                const fullName =
-                  d.student?.lastname || d.student?.name
-                    ? `${d.student?.lastname ?? ""} ${d.student?.name ?? ""}`.trim()
-                    : d.student_id;
-
-                return (
-                  <option key={d.id} value={d.id}>
-                    {fullName} — {d.start_date} → {d.end_date ?? "…"}
-                  </option>
-                );
-              })}
+              {students.map((s) => (
+                <option key={s.user_id} value={s.user_id}>
+                  {`${s.lastname ?? ""} ${s.name ?? ""}`.trim()}
+                </option>
+              ))}
             </select>
-
-            <div className="mt-1 text-[11px] text-muted">
-              (Μετά το κάνουμε join με students για ονοματεπώνυμο.)
-            </div>
           </div>
 
           <div>
@@ -641,16 +689,15 @@ export default function ParapemptikaPage() {
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-muted">Status *</div>
-            <input
+            <div className="mb-1 text-xs text-muted">Κατάσταση</div>
+            <select
               className="input"
               value={form.status}
               onChange={(e) => setField("status", e.target.value)}
-              placeholder="π.χ. active"
-            />
-            <div className="mt-1 text-[11px] text-muted">
-              Αν το enum σου έχει συγκεκριμένες τιμές, εδώ το κάνουμε select.
-            </div>
+            >
+              <option value="pending">Εκκρεμεί</option>
+              <option value="completed">Ολοκληρωμένο</option>
+            </select>
           </div>
 
           <div className="md:col-span-2">

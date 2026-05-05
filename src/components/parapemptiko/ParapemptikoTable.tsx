@@ -4,7 +4,8 @@ export type ParapemtikoRow = {
   id: string;
   tenant_id: string;
   title: string;
-  doc_opinion_id: string;
+  student_id: string | null;
+  doc_opinion_id: string | null;
   code: string | null;
   code_diagnosis: string | null;
   start_date: string;
@@ -13,14 +14,15 @@ export type ParapemtikoRow = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  student?: { name: string | null; lastname: string | null; amka: string | null } | null;
 };
 
 export type ParapemptikoColKey =
+  | "amka"
   | "code"
   | "code_diagnosis"
   | "start_date"
   | "end_date"
-  | "status"
   | "notes"
   | "created_at";
 
@@ -79,12 +81,14 @@ export default function ParapemptikοTable({
                   onChange={toggleSelectPage}
                 />
               </th>
+              <th className="px-3 py-3">Μαθητής</th>
               <th className="px-3 py-3">Τίτλος</th>
+              <th className="px-3 py-3">Κατάσταση</th>
+              {show("amka") && <th className="px-3 py-3">ΑΜΚΑ</th>}
               {show("code") && <th className="px-3 py-3">Κωδικός</th>}
               {show("code_diagnosis") && <th className="px-3 py-3">Κωδ. Διάγνωσης</th>}
               {show("start_date") && <th className="px-3 py-3">Έναρξη</th>}
               {show("end_date") && <th className="px-3 py-3">Λήξη</th>}
-              {show("status") && <th className="px-3 py-3">Status</th>}
               {show("notes") && <th className="px-3 py-3">Σημειώσεις</th>}
               {show("created_at") && <th className="px-3 py-3">Ημ. Δημιουργίας</th>}
               <th className="px-3 py-3 text-right">Ενέργειες</th>
@@ -105,12 +109,28 @@ export default function ParapemptikοTable({
                     onChange={() => toggleSelect(r.id)}
                   />
                 </td>
+                <td className="px-3 py-3 text-muted">
+                  {r.student
+                    ? `${r.student.lastname ?? ""} ${r.student.name ?? ""}`.trim() || "—"
+                    : "—"}
+                </td>
                 <td className="px-3 py-3 font-medium">{r.title}</td>
+                <td className="px-3 py-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      r.status === "completed"
+                        ? "bg-green-500/15 text-green-400"
+                        : "bg-yellow-500/15 text-yellow-400"
+                    }`}
+                  >
+                    {r.status === "completed" ? "Ολοκληρωμένο" : "Εκκρεμεί"}
+                  </span>
+                </td>
+                {show("amka") && <td className="px-3 py-3 text-muted">{r.student?.amka ?? "-"}</td>}
                 {show("code") && <td className="px-3 py-3">{r.code ?? "-"}</td>}
                 {show("code_diagnosis") && <td className="px-3 py-3">{r.code_diagnosis ?? "-"}</td>}
                 {show("start_date") && <td className="px-3 py-3">{r.start_date}</td>}
                 {show("end_date") && <td className="px-3 py-3">{r.end_date ?? "-"}</td>}
-                {show("status") && <td className="px-3 py-3">{r.status}</td>}
                 {show("notes") && <td className="px-3 py-3">{r.notes ? r.notes.slice(0, 60) : "-"}</td>}
                 {show("created_at") && <td className="px-3 py-3">{r.created_at?.slice(0, 10) ?? "-"}</td>}
                 <td className="px-3 py-3">

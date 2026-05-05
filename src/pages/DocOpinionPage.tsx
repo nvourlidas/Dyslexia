@@ -18,13 +18,15 @@ import { useColumnVisibility } from "@/hooks/useColumnVisibility";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
-type StudentRow = { user_id: string; name: string; lastname: string };
+type StudentRow = { user_id: string; name: string; lastname: string; amka: string | null };
 
 type DocOpinionForm = {
   student_id: string;
   start_date: string;
   end_date: string;
   notes: string;
+  status: string;
+  parapemptiko_ids: string[];
 };
 
 const EMPTY_FORM: DocOpinionForm = {
@@ -32,16 +34,21 @@ const EMPTY_FORM: DocOpinionForm = {
   start_date: "",
   end_date: "",
   notes: "",
+  status: "pending",
+  parapemptiko_ids: [],
 };
 
 const DOC_ALL_COLUMNS: { key: DocOpinionColKey; label: string }[] = [
+  { key: "amka", label: "ΑΜΚΑ" },
+  { key: "code", label: "Κωδικοί" },
+  { key: "code_diagnosis", label: "Κωδ. Διάγνωσης" },
   { key: "start_date", label: "Έναρξη" },
   { key: "end_date", label: "Λήξη" },
   { key: "notes", label: "Σημειώσεις" },
   { key: "created_at", label: "Ημ. Δημιουργίας" },
 ];
 
-const DOC_DEFAULT_VISIBLE: DocOpinionColKey[] = ["start_date", "end_date", "notes"];
+const DOC_DEFAULT_VISIBLE: DocOpinionColKey[] = ["amka", "code", "code_diagnosis", "start_date", "end_date", "notes"];
 
 const DOC_ALL_KEYS = DOC_ALL_COLUMNS.map((c) => c.key) as DocOpinionColKey[];
 
@@ -58,25 +65,18 @@ async function getMyTenantId(userId: string): Promise<string> {
   return data.tenant_id as string;
 }
 
-function toForm(r?: DocOpinionRow | null): DocOpinionForm {
+function toForm(r?: DocOpinionRow | null, linkedIds: string[] = []): DocOpinionForm {
   if (!r) return { ...EMPTY_FORM };
   return {
     student_id: r.student_id ?? "",
     start_date: r.start_date ?? "",
     end_date: r.end_date ?? "",
     notes: r.notes ?? "",
+    status: r.status ?? "pending",
+    parapemptiko_ids: linkedIds,
   };
 }
 
-function formToDb(f: DocOpinionForm) {
-  return {
-    student_id: f.student_id,
-    start_date: f.start_date,
-    end_date: f.end_date || null,
-    notes: f.notes.trim() || null,
-    updated_at: new Date().toISOString(),
-  };
-}
 
 export default function DocOpinionPage() {
   const { user } = useAuth();
@@ -91,10 +91,22 @@ export default function DocOpinionPage() {
   const [query, setQuery] = useState("");
 
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [recordStudentIds, setRecordStudentIds] = useState<Set<string>>(new Set());
+
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
+  const [amkaFilter, setAmkaFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState<"all" | "expired" | "active" | "none">("all");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DocOpinionRow | null>(null);
   const [form, setForm] = useState<DocOpinionForm>({ ...EMPTY_FORM });
+  const [studentParapemptika, setStudentParapemptika] = useState<{
+    id: string;
+    title: string;
+    code: string | null;
+    start_date: string;
+    end_date: string | null;
+  }[]>([]);
 
   const PAGE_SIZE = 15;
   const [page, setPage] = useState(1);
@@ -129,9 +141,8 @@ export default function DocOpinionPage() {
       tenantId,
     });
 
-  // ✅ joined student as object
   const SELECT =
-    "id,tenant_id,student_id,start_date,end_date,notes,created_at,updated_at, student:students(name,lastname)";
+    "id,tenant_id,student_id,start_date,end_date,notes,status,created_at,updated_at,student:students(name,lastname,amka),parapemptika:parapemtiko(code,code_diagnosis)";
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +166,7 @@ export default function DocOpinionPage() {
   async function fetchStudents(tid: string) {
     const { data, error } = await supabase
       .from("students")
-      .select("user_id,name,lastname")
+      .select("user_id,name,lastname,amka")
       .eq("tenant_id", tid)
       .eq("active", true)
       .order("lastname", { ascending: true });
@@ -169,7 +180,23 @@ export default function DocOpinionPage() {
     setStudents((data ?? []) as StudentRow[]);
   }
 
-  async function fetchDocOpinions(tid: string, p = page, q = query) {
+  async function fetchRecordStudentIds(tid: string) {
+    const { data } = await supabase
+      .from("doc_opinion")
+      .select("student_id")
+      .eq("tenant_id", tid)
+      .not("student_id", "is", null);
+    setRecordStudentIds(new Set((data ?? []).map((r: any) => r.student_id)));
+  }
+
+  async function fetchDocOpinions(
+    tid: string,
+    p = page,
+    q = query,
+    sf = statusFilter,
+    af = amkaFilter,
+    edf = endDateFilter
+  ) {
     setLoading(true);
     setError(null);
 
@@ -184,8 +211,16 @@ export default function DocOpinionPage() {
     const qq = q.trim();
     if (qq) {
       const safe = qq.replace(/,/g, " ");
-      req = req.or(`notes.ilike.%${safe}%,student_id.ilike.%${safe}%`);
+      req = req.or(`notes.ilike.%${safe}%`);
     }
+
+    if (sf !== "all") req = req.eq("status", sf);
+    if (af) req = req.eq("student_id", af);
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (edf === "expired") req = req.not("end_date", "is", null).lt("end_date", today);
+    if (edf === "active") req = req.or(`end_date.is.null,end_date.gte.${today}`);
+    if (edf === "none") req = req.is("end_date", null);
 
     const { data, error, count } = await req
       .order("created_at", { ascending: false })
@@ -198,9 +233,8 @@ export default function DocOpinionPage() {
     } else {
       const transformed = (data ?? []).map((item: any) => ({
         ...item,
-        student: Array.isArray(item.student)
-          ? item.student[0] ?? null
-          : item.student ?? null,
+        student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null,
+        parapemptika: Array.isArray(item.parapemptika) ? item.parapemptika : [],
       })) as DocOpinionRow[];
 
       setRows(transformed);
@@ -213,6 +247,7 @@ export default function DocOpinionPage() {
   useEffect(() => {
     if (!tenantId) return;
     fetchStudents(tenantId);
+    fetchRecordStudentIds(tenantId);
     fetchDocOpinions(tenantId, page, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, page]);
@@ -223,6 +258,13 @@ export default function DocOpinionPage() {
     fetchDocOpinions(tenantId, 1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, tenantId]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    setPage(1);
+    fetchDocOpinions(tenantId, 1, query, statusFilter, amkaFilter, endDateFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, amkaFilter, endDateFilter]);
 
   async function bulkDelete() {
     if (!tenantId || selectedIds.length === 0) return;
@@ -257,9 +299,8 @@ export default function DocOpinionPage() {
 
     const allRows = (data ?? []).map((item: any) => ({
       ...item,
-      student: Array.isArray(item.student)
-        ? item.student[0] ?? null
-        : item.student ?? null,
+      student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null,
+      parapemptika: Array.isArray(item.parapemptika) ? item.parapemptika : [],
     })) as DocOpinionRow[];
 
     const exportData = allRows.map((r) => {
@@ -268,7 +309,13 @@ export default function DocOpinionPage() {
           ? `${r.student?.lastname ?? ""} ${r.student?.name ?? ""}`.trim()
           : r.student_id;
 
+      const codes = (r.parapemptika ?? []).map((p) => p.code).filter(Boolean).join(", ");
+      const codeDiagnoses = (r.parapemptika ?? []).map((p) => p.code_diagnosis).filter(Boolean).join(", ");
+
       const obj: Record<string, any> = { Μαθητής: fullName };
+      if (isColVisible("amka")) obj["ΑΜΚΑ"] = r.student?.amka ?? "";
+      if (isColVisible("code")) obj["Κωδικοί"] = codes;
+      if (isColVisible("code_diagnosis")) obj["Κωδ. Διάγνωσης"] = codeDiagnoses;
       if (isColVisible("start_date")) obj["Έναρξη"] = r.start_date;
       if (isColVisible("end_date")) obj["Λήξη"] = r.end_date ?? "";
       if (isColVisible("notes")) obj["Σημειώσεις"] = r.notes ?? "";
@@ -286,15 +333,35 @@ export default function DocOpinionPage() {
     saveAs(blob, `doc_opinions_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  async function fetchStudentParapemptika(studentId: string, _docOpinionId?: string) {
+    if (!tenantId || !studentId) { setStudentParapemptika([]); return; }
+    const { data } = await supabase
+      .from("parapemtiko")
+      .select("id,title,code,start_date,end_date")
+      .eq("tenant_id", tenantId)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    setStudentParapemptika(data ?? []);
+  }
+
   function openCreate() {
     setEditing(null);
+    setStudentParapemptika([]);
     setForm({ ...EMPTY_FORM });
     setModalOpen(true);
   }
 
-  function openEdit(r: DocOpinionRow) {
+  async function openEdit(r: DocOpinionRow) {
     setEditing(r);
-    setForm(toForm(r));
+    // fetch parapemptika linked to this doc_opinion
+    const { data } = await supabase
+      .from("parapemtiko")
+      .select("id")
+      .eq("tenant_id", tenantId!)
+      .eq("doc_opinion_id", r.id);
+    const linkedIds = (data ?? []).map((p: any) => p.id);
+    setForm(toForm(r, linkedIds));
+    await fetchStudentParapemptika(r.student_id ?? "", r.id);
     setModalOpen(true);
   }
 
@@ -302,6 +369,7 @@ export default function DocOpinionPage() {
     if (saving) return;
     setModalOpen(false);
     setEditing(null);
+    setStudentParapemptika([]);
     setForm({ ...EMPTY_FORM });
   }
 
@@ -334,34 +402,23 @@ export default function DocOpinionPage() {
           start_date: form.start_date,
           end_date: form.end_date || null,
           notes: form.notes.trim() || null,
+          status: form.status,
+          parapemptiko_ids: form.parapemptiko_ids,
         });
 
         closeModal();
         setPage(1);
         await fetchDocOpinions(tenantId, 1, query);
       } else {
-        const payload = formToDb(form);
-
-        const { data: updated, error } = await supabase
-          .from("doc_opinion")
-          .update(payload)
-          .eq("tenant_id", tenantId)
-          .eq("id", editing.id)
-          .select(SELECT)
-          .single();
-
-        if (error) throw error;
-
-        const transformedUpdated = {
-          ...updated,
-          student: Array.isArray(updated.student)
-            ? updated.student[0] ?? null
-            : updated.student ?? null,
-        } as DocOpinionRow;
-
-        setRows((prev) =>
-          prev.map((x) => (x.id === editing.id ? transformedUpdated : x))
-        );
+        await callFunction("doc_opinion-update", {
+          id: editing.id,
+          student_id: form.student_id,
+          start_date: form.start_date,
+          end_date: form.end_date || null,
+          notes: form.notes.trim() || null,
+          status: form.status,
+          parapemptiko_ids: form.parapemptiko_ids,
+        });
 
         closeModal();
         fetchDocOpinions(tenantId, page, query);
@@ -458,6 +515,42 @@ export default function DocOpinionPage() {
           Εξαγωγή Excel
         </button>
 
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+        >
+          <option value="all">Κατάσταση: Όλες</option>
+          <option value="pending">Εκκρεμεί</option>
+          <option value="completed">Ολοκληρωμένη</option>
+        </select>
+
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={amkaFilter}
+          onChange={(e) => setAmkaFilter(e.target.value)}
+        >
+          <option value="">ΑΜΚΑ: Όλα</option>
+          {students
+            .filter((s) => s.amka && recordStudentIds.has(s.user_id))
+            .map((s) => (
+              <option key={s.user_id} value={s.user_id}>
+                {s.amka} — {`${s.lastname ?? ""} ${s.name ?? ""}`.trim()}
+              </option>
+            ))}
+        </select>
+
+        <select
+          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          value={endDateFilter}
+          onChange={(e) => setEndDateFilter(e.target.value as typeof endDateFilter)}
+        >
+          <option value="all">Λήξη: Όλες</option>
+          <option value="expired">Ληγμένες</option>
+          <option value="active">Ενεργές</option>
+          <option value="none">Χωρίς λήξη</option>
+        </select>
+
         {selectedIds.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">
@@ -545,7 +638,13 @@ export default function DocOpinionPage() {
             <select
               className="input"
               value={form.student_id}
-              onChange={(e) => setField("student_id", e.target.value)}
+              onChange={(e) => {
+                const newId = e.target.value;
+                setField("student_id", newId);
+                setField("parapemptiko_ids", []);
+                if (newId) fetchStudentParapemptika(newId, editing?.id);
+                else setStudentParapemptika([]);
+              }}
             >
               <option value="">— Επιλογή —</option>
               {students.map((s) => (
@@ -555,6 +654,45 @@ export default function DocOpinionPage() {
               ))}
             </select>
           </div>
+
+          {studentParapemptika.length > 0 && (
+            <div className="md:col-span-2">
+              <div className="mb-1 text-xs text-muted">Παραπεμπτικά μαθητή</div>
+              <div className="rounded-lg border border-border bg-panel max-h-44 overflow-y-auto divide-y divide-border/40">
+                {studentParapemptika.map((p) => {
+                  const checked = form.parapemptiko_ids.includes(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-panel2"
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-primary mt-0.5 shrink-0"
+                        checked={checked}
+                        onChange={() =>
+                          setField(
+                            "parapemptiko_ids",
+                            checked
+                              ? form.parapemptiko_ids.filter((x) => x !== p.id)
+                              : [...form.parapemptiko_ids, p.id]
+                          )
+                        }
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">{p.title}</div>
+                        <div className="text-xs text-muted flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                          {p.code && <span>Κωδ.: {p.code}</span>}
+                          <span>Έναρξη: {p.start_date}</span>
+                          {p.end_date && <span>Λήξη: {p.end_date}</span>}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="mb-1 text-xs text-muted">Ημ. Έναρξης *</div>
@@ -574,6 +712,18 @@ export default function DocOpinionPage() {
               value={form.end_date}
               onChange={(e) => setField("end_date", e.target.value)}
             />
+          </div>
+
+          <div>
+            <div className="mb-1 text-xs text-muted">Κατάσταση</div>
+            <select
+              className="input"
+              value={form.status}
+              onChange={(e) => setField("status", e.target.value)}
+            >
+              <option value="pending">Εκκρεμεί</option>
+              <option value="completed">Ολοκληρωμένη</option>
+            </select>
           </div>
 
           <div className="md:col-span-2">
