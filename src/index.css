@@ -37,15 +37,15 @@
 
 /* ---------- Light theme override ---------- */
 :root.light {
-  --color-bg: #ffffff;
-  --color-bg2: #e4e1e1;
-  --color-panel: #f5f6fa;
-  --color-panel2: #eceef5;
+  --color-bg: #f0f2f5;
+  --color-bg2: #d1d5db;
+  --color-panel: #ffffff;
+  --color-panel2: #e5e7eb;
 
   --color-text: #111827;
-  --color-muted: #6b7280;
+  --color-muted: #4b5563;
 
-  --color-border: #5c5c5c;
+  --color-border: #9ca3af;
   --color-accent: #3b82f6;
 
   --color-primary: #2563eb;

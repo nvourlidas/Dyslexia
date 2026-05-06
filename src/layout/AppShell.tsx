@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { NAV, type NavEntry } from '../_nav'
 import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react'
 import { getInitialTheme, toggleTheme, type ThemeMode } from '../theme/theme'
+import { applyAppearance, loadAppearance } from '../theme/appearance'
 import { useAuth } from '@/auth/AuthProvider'
 
 function cx(...arr: Array<string | false | undefined | null>) {
@@ -91,6 +92,11 @@ export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+
+  // Re-apply color theme when dark/light mode switches (colors differ per mode)
+  useEffect(() => {
+    applyAppearance(loadAppearance())
+  }, [mode])
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -327,6 +333,8 @@ function NavBlock({
   setOpenGroups: React.Dispatch<React.SetStateAction<Set<string>>>
   pathname: string
 }) {
+  const navigate = useNavigate()
+
   if (entry.type === 'divider') {
     return <div className="my-3 border-t border-border/15/60" />
   }
@@ -349,23 +357,39 @@ function NavBlock({
           cx(
             'mb-1 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
             isActive
-              ? 'border-border/15 bg-panel text-text'
+              ? 'border-transparent'
               : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
             collapsed && 'justify-center px-2',
           )
         }
+        style={({ isActive }) =>
+          isActive
+            ? {
+                background: 'color-mix(in oklab, var(--color-primary) 18%, var(--color-panel))',
+                borderColor: 'color-mix(in oklab, var(--color-primary) 35%, transparent)',
+                color: 'var(--color-primary)',
+              }
+            : undefined
+        }
         title={collapsed ? entry.label : undefined}
       >
-        {Icon ? (
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
-            <Icon size={18} />
-          </span>
-        ) : (
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
-            {entry.label[0]}
-          </span>
+        {({ isActive }) => (
+          <>
+            {Icon ? (
+              <span
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel"
+                style={isActive ? { borderColor: 'color-mix(in oklab, var(--color-primary) 40%, transparent)' } : undefined}
+              >
+                <Icon size={18} />
+              </span>
+            ) : (
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
+                {entry.label[0]}
+              </span>
+            )}
+            {!collapsed && <span className="truncate">{entry.label}</span>}
+          </>
         )}
-        {!collapsed && <span className="truncate">{entry.label}</span>}
       </NavLink>
     )
   }
@@ -411,19 +435,39 @@ function NavBlock({
         <div className="mt-2 grid gap-1 pl-11">
           {entry.children.map((c) => {
             const ChildIcon = c.icon
-            const active = isActivePath(pathname, c.to, c.end)
+            if ('isAction' in c && c.isAction) {
+              return (
+                <button
+                  key={c.to}
+                  type="button"
+                  onClick={() => navigate(c.to)}
+                  className="flex items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-sm transition text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text w-full text-left"
+                >
+                  {ChildIcon ? <ChildIcon size={16} /> : <span className="opacity-60">•</span>}
+                  <span className="truncate">{c.label}</span>
+                </button>
+              )
+            }
             return (
               <NavLink
                 key={c.to}
                 to={c.to}
-                end={c.end}
-                className={() =>
+                end={(c as { end?: boolean }).end}
+                className={({ isActive }) =>
                   cx(
                     'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-                    active
-                      ? 'border-border/15 bg-panel2 text-text'
+                    isActive
+                      ? 'border-transparent'
                       : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
                   )
+                }
+                style={({ isActive }) =>
+                  isActive
+                    ? {
+                        background: 'color-mix(in oklab, var(--color-primary) 18%, var(--color-panel))',
+                        color: 'var(--color-primary)',
+                      }
+                    : undefined
                 }
               >
                 {ChildIcon ? <ChildIcon size={16} /> : <span className="opacity-60">•</span>}

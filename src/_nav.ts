@@ -7,7 +7,12 @@ import {
   CalendarClock,
   Settings,
   Palette,
+  PencilRuler,
 } from 'lucide-react'
+
+export type GroupChild =
+  | { label: string; to: string; end?: boolean; roles?: string[]; icon?: LucideIcon }
+  | { label: string; to: string; isAction: true; icon?: LucideIcon }
 
 export type NavEntry =
   | { type: 'section'; title: string }
@@ -18,7 +23,7 @@ export type NavEntry =
       label: string
       roles?: string[]
       icon?: LucideIcon
-      children: Array<{ label: string; to: string; end?: boolean; roles?: string[]; icon?: LucideIcon }>
+      children: GroupChild[]
     }
 
 export const NAV: NavEntry[] = [
@@ -45,6 +50,9 @@ export const NAV: NavEntry[] = [
     type: 'group',
     label: 'Ρυθμίσεις',
     icon: Settings,
-    children: [{ label: 'Εμφάνιση', to: '/themesettings', icon: Palette }],
+    children: [
+      { label: 'Εμφάνιση', to: '/themesettings', icon: Palette },
+      { label: 'Επεξεργασία αρχικής', to: '/?edit=1', isAction: true, icon: PencilRuler },
+    ],
   },
 ]

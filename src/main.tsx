@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
 import { applyTheme, getInitialTheme } from './theme/theme'
+import { applyAppearance, loadAppearance } from './theme/appearance'
 
 import { AuthProvider } from '@/auth/AuthProvider'
 import ProtectedRoute from '@/auth/ProtectedRoute'
@@ -22,6 +23,7 @@ import ParapemptikaPage from '@/pages/ParapemptikaPage'
 import DocOpinionPage from '@/pages/DocOpinionPage'
 
 applyTheme(getInitialTheme())
+applyAppearance(loadAppearance())
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
