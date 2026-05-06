@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/auth/AuthProvider";
+import NotepadSection from "@/components/dashboard/NotepadSection";
 
 type Kpis = {
   activeStudents: number;
@@ -371,10 +372,11 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
   }, [kpis.expiringParapemtika30, kpis.missingCodeParapemtika]);
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-panel p-4">
-        <div className="text-lg font-semibold">Dashboard</div>
-        <div className="text-sm text-muted-foreground">Σύνοψη & εκκρεμότητες</div>
+    <div className="space-y-3">
+      {/* Minimal page title */}
+      <div className="flex items-center gap-2 px-1">
+        <h1 className="text-lg font-semibold">Dashboard</h1>
+        <span className="text-sm text-muted">— Σύνοψη & εκκρεμότητες</span>
       </div>
 
       {err && (
@@ -384,61 +386,50 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard title="Ενεργοί Μαθητές" value={kpis.activeStudents} loading={loading} />
         <KpiCard title="Ενεργοί Καθηγητές" value={kpis.activeTeachers} loading={loading} />
         <KpiCard title="Συνεδρίες Σήμερα" value={kpis.todaySessions} loading={loading} />
         <KpiCard title="Λήγουν σε 30μ" value={kpis.expiringParapemtika30} loading={loading} />
       </div>
 
-      {/* Εκκρεμότητες */}
-      <div className="rounded-2xl border border-border bg-panel p-4">
-        <div className="mb-3 text-base font-semibold">Εκκρεμότητες</div>
-
-        <div className="space-y-2">
-          {pendingItems.map((it) => {
-            const clickable =
-              it.key === "expiring30" && (it.value ?? 0) > 0 && !loading;
-
-            return (
-              <div
-                key={it.key}
-                onClick={() => {
-                  if (!clickable) return;
-                  setShowExpiringModal(true);
-                }}
-                className={[
-                  "flex items-center justify-between rounded-xl border border-border bg-bg px-3 py-2",
-                  clickable ? "cursor-pointer hover:bg-bg/60 transition" : "",
-                ].join(" ")}
-                role={clickable ? "button" : undefined}
-                tabIndex={clickable ? 0 : -1}
-              >
-                <div className="text-sm">{it.title}</div>
-                <div className="text-sm font-semibold">{loading ? "…" : it.value}</div>
-              </div>
-            );
-          })}
+      {/* 2-column: Notepad (left) + Εκκρεμότητες (right) */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {/* Notepad — takes 2/3 */}
+        <div className="lg:col-span-2">
+          {tenantId && <NotepadSection tenantId={tenantId} />}
         </div>
-      </div>
 
-      {/* Mini list: expiring parapemtika */}
-      <div className="rounded-2xl border border-border bg-panel p-4">
-        <div className="mb-3 text-base font-semibold">Λήγουν σύντομα</div>
-        {loading ? (
-          <div className="text-sm text-muted-foreground">Φόρτωση…</div>
-        ) : expiringRows.length === 0 ? (
-          <div className="text-sm text-muted-foreground">Δεν υπάρχουν.</div>
-        ) : (
+        {/* Εκκρεμότητες — takes 1/3 */}
+        <div className="rounded-2xl border border-border bg-panel p-4">
+          <div className="mb-3 text-base font-semibold">Εκκρεμότητες</div>
+
           <div className="space-y-2">
-            {expiringRows.map((r) => (
-              <div key={r.id} className="rounded-xl border border-border bg-bg px-3 py-2">
-                <div className="text-sm font-medium">{r.title}</div>
-                <div className="text-xs text-muted-foreground">Λήξη: {r.end_date ?? "-"}</div>
-              </div>
-            ))}
+            {pendingItems.map((it) => {
+              const clickable =
+                it.key === "expiring30" && (it.value ?? 0) > 0 && !loading;
+
+              return (
+                <div
+                  key={it.key}
+                  onClick={() => {
+                    if (!clickable) return;
+                    setShowExpiringModal(true);
+                  }}
+                  className={[
+                    "flex items-center justify-between rounded-xl border border-border bg-bg px-3 py-2",
+                    clickable ? "cursor-pointer hover:bg-bg/60 transition" : "",
+                  ].join(" ")}
+                  role={clickable ? "button" : undefined}
+                  tabIndex={clickable ? 0 : -1}
+                >
+                  <div className="text-sm">{it.title}</div>
+                  <div className="text-sm font-semibold">{loading ? "…" : it.value}</div>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Modal: Expiring parapemtika */}
@@ -634,9 +625,9 @@ function KpiCard({
   loading: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-panel p-4">
-      <div className="text-xs text-muted-foreground">{title}</div>
-      <div className="mt-2 text-2xl font-semibold">{loading ? "…" : value}</div>
+    <div className="rounded-2xl border border-border bg-panel px-4 py-3">
+      <div className="text-xs text-muted">{title}</div>
+      <div className="mt-1 text-xl font-semibold">{loading ? "…" : value}</div>
     </div>
   );
 }
