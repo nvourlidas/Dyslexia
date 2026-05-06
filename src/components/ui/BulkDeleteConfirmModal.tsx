@@ -32,7 +32,7 @@ export default function BulkDeleteConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
         aria-label="Κλείσιμο"
@@ -40,7 +40,7 @@ export default function BulkDeleteConfirmModal({
         onClick={() => (!busy ? onClose() : null)}
       />
 
-      <div className="relative mx-auto mt-24 w-[92%] max-w-md">
+      <div className="relative w-full max-w-md">
         <div className="rounded-2xl border border-border bg-panel shadow-xl">
           <div className="border-b border-border/60 px-4 py-3 flex items-center gap-2">
             <Trash2 className="h-4 w-4 text-red-400" />

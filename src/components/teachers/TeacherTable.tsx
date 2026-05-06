@@ -120,125 +120,84 @@ export default function TeachersTable({
 }) {
   return (
     <div className="w-full rounded-md border border-border/15 overflow-hidden">
-      <div className="hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-panel/60">
-              <tr className="text-left">
-                <Th className="w-10">
-                  <input
-                    type="checkbox"
-                    className="accent-primary"
-                    checked={allPageSelected}
-                    onChange={toggleSelectPage}
-                  />
-                </Th>
-                <Th>Ονοματεπώνυμο</Th>
-                {isColVisible("phone") && <Th>Τηλέφωνο</Th>}
-                {isColVisible("email") && <Th>Email</Th>}
-                {isColVisible("idikotita") && <Th>Ιδικότητα</Th>}
-                {isColVisible("active") && <Th>Κατάσταση</Th>}
-                {isColVisible("created_at") && <Th>Ημ. Δημιουργίας</Th>}
-                <Th className="text-right pr-3">Ενέργειες</Th>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[480px]">
+          <thead className="bg-panel/60">
+            <tr className="text-left">
+              <Th className="w-10">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={allPageSelected}
+                  onChange={toggleSelectPage}
+                />
+              </Th>
+              <Th>Ονοματεπώνυμο</Th>
+              {isColVisible("phone") && <Th>Τηλέφωνο</Th>}
+              {isColVisible("email") && <Th>Email</Th>}
+              {isColVisible("idikotita") && <Th>Ιδικότητα</Th>}
+              {isColVisible("active") && <Th>Κατάσταση</Th>}
+              {isColVisible("created_at") && <Th>Ημ. Δημιουργίας</Th>}
+              <Th className="text-right pr-3">Ενέργειες</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>Loading…</td>
               </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>Loading…</td>
-                </tr>
-              )}
-              {!loading && filteredLength === 0 && (
-                <tr>
-                  <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>Κανένας εκπαιδευτικός</td>
-                </tr>
-              )}
-              {!loading && filteredLength > 0 && paginated.map((t) => {
-                const fullName = `${t.last_name ?? ""} ${t.name ?? ""}`.trim() || "—";
-                return (
-                  <tr key={t.id} className="border-t border-border/5 hover:bg-panel/10">
+            )}
+            {!loading && filteredLength === 0 && (
+              <tr>
+                <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>Κανένας εκπαιδευτικός</td>
+              </tr>
+            )}
+            {!loading && filteredLength > 0 && paginated.map((t) => {
+              const fullName = `${t.last_name ?? ""} ${t.name ?? ""}`.trim() || "—";
+              return (
+                <tr key={t.id} className="border-t border-border/5 hover:bg-panel/10">
+                  <Td>
+                    <input type="checkbox" className="accent-primary" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} />
+                  </Td>
+                  <Td>
+                    <div className="font-medium whitespace-nowrap">{fullName}</div>
+                    {t.idikotita && <div className="text-xs text-muted">{t.idikotita}</div>}
+                  </Td>
+                  {isColVisible("phone") && <Td className="whitespace-nowrap">{t.phone ?? "—"}</Td>}
+                  {isColVisible("email") && <Td>{t.email ?? "—"}</Td>}
+                  {isColVisible("idikotita") && <Td>{t.idikotita ?? "—"}</Td>}
+                  {isColVisible("active") && (
                     <Td>
-                      <input type="checkbox" className="accent-primary" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} />
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${t.active ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+                        {t.active ? "Ενεργός" : "Ανενεργός"}
+                      </span>
                     </Td>
-                    <Td>
-                      <div className="font-medium">{fullName}</div>
-                      {t.idikotita && <div className="text-xs text-muted">{t.idikotita}</div>}
-                    </Td>
-                    {isColVisible("phone") && <Td>{t.phone ?? "—"}</Td>}
-                    {isColVisible("email") && <Td>{t.email ?? "—"}</Td>}
-                    {isColVisible("idikotita") && <Td>{t.idikotita ?? "—"}</Td>}
-                    {isColVisible("active") && (
-                      <Td>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${t.active ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
-                          {t.active ? "Ενεργός" : "Ανενεργός"}
-                        </span>
-                      </Td>
-                    )}
-                    {isColVisible("created_at") && <Td>{formatDateDMY(t.created_at)}</Td>}
-                    <Td className="text-right space-x-1 pr-3">
-                      <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(t)} />
-                      <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(t)} />
-                      <DeleteButton id={t.id} onDeleted={onDeleted} />
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="md:hidden">
-        {loading && <div className="px-3 py-4 text-sm opacity-60">Loading…</div>}
-        {!loading && filteredLength === 0 && <div className="px-3 py-4 text-sm opacity-60">Κανένας εκπαιδευτικός</div>}
-        {!loading && filteredLength > 0 && paginated.map((t) => {
-          const fullName = `${t.last_name ?? ""} ${t.name ?? ""}`.trim() || "—";
-          return (
-            <div key={t.id} className="border-t border-border/10 bg-panel/5 px-3 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <input type="checkbox" className="mt-1 accent-primary" checked={selectedIds.includes(t.id)} onChange={() => toggleSelect(t.id)} />
-                  <div>
-                    <div className="font-medium text-sm">{fullName}</div>
-                    <div className="text-xs text-muted">{t.phone ?? "—"}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(t)} />
-                  <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(t)} />
-                  <DeleteButton id={t.id} onDeleted={onDeleted} />
-                </div>
-              </div>
-              <div className="mt-2 space-y-1 text-xs">
-                {isColVisible("email") && <div><span className="opacity-70">Email: </span>{t.email ?? "—"}</div>}
-                {isColVisible("idikotita") && <div><span className="opacity-70">Ιδικότητα: </span>{t.idikotita ?? "—"}</div>}
-                {isColVisible("active") && <div><span className="opacity-70">Κατάσταση: </span>{t.active ? "Ενεργός" : "Ανενεργός"}</div>}
-                {isColVisible("created_at") && <div className="opacity-70">Δημιουργήθηκε: {formatDateDMY(t.created_at)}</div>}
-              </div>
-            </div>
-          );
-        })}
+                  )}
+                  {isColVisible("created_at") && <Td className="whitespace-nowrap">{formatDateDMY(t.created_at)}</Td>}
+                  <Td className="text-right space-x-1 pr-3 whitespace-nowrap">
+                    <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(t)} />
+                    <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(t)} />
+                    <DeleteButton id={t.id} onDeleted={onDeleted} />
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {!loading && filteredLength > 0 && (
-        <div className="flex items-center justify-between px-3 py-2 text-xs text-muted border-t border-border/10">
-          <div>
-            Εμφάνιση <span className="font-semibold">{startIdx}</span>–<span className="font-semibold">{endIdx}</span> από <span className="font-semibold">{filteredLength}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <span>Γραμμές ανά σελίδα:</span>
-              <select className="bg-transparent border border-border/10 rounded px-1 py-0.5" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="px-2 py-1 rounded border border-border/10 disabled:opacity-40" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Προηγ.</button>
-              <span>Σελίδα <span className="font-semibold">{page}</span> από <span className="font-semibold">{pageCount}</span></span>
-              <button className="px-2 py-1 rounded border border-border/10 disabled:opacity-40" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page === pageCount}>Επόμενο</button>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted border-t border-border/10">
+          <div>{startIdx}–{endIdx} από {filteredLength}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select className="bg-transparent border border-border/10 rounded px-1 py-0.5" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+              <option value={10}>10 / σελ.</option>
+              <option value={25}>25 / σελ.</option>
+              <option value={50}>50 / σελ.</option>
+            </select>
+            <button className="px-2 py-1 rounded border border-border/10 disabled:opacity-40" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</button>
+            <span>{page} / {pageCount}</span>
+            <button className="px-2 py-1 rounded border border-border/10 disabled:opacity-40" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page === pageCount}>›</button>
           </div>
         </div>
       )}

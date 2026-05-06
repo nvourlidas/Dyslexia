@@ -454,7 +454,7 @@ export default function DocOpinionPage() {
         </select>
 
         <select
-          className="h-9 rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
+          className="h-9 max-w-[200px] sm:max-w-xs rounded-md px-2 text-sm border border-border/30 bg-panel2 text-text cursor-pointer"
           value={amkaFilter}
           onChange={(e) => setAmkaFilter(e.target.value)}
         >

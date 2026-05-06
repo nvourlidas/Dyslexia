@@ -13,19 +13,21 @@ function Modal({
   disableClose?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-md border border-border/10 bg-panel text-text shadow-xl">
-        <div className="px-4 py-3 border-b border-border/10 flex items-center justify-between">
-          <div className="font-semibold">{title}</div>
-          <button
-            onClick={onClose}
-            disabled={disableClose}
-            className="rounded px-2 py-1 hover:bg-border/5 disabled:opacity-50"
-          >
-            ✕
-          </button>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative w-full max-w-lg rounded-md border border-border/10 bg-panel text-text shadow-xl">
+          <div className="sticky top-0 z-10 rounded-t-md bg-panel px-4 py-3 border-b border-border/10 flex items-center justify-between">
+            <div className="font-semibold">{title}</div>
+            <button
+              onClick={onClose}
+              disabled={disableClose}
+              className="rounded px-2 py-1 hover:bg-border/5 disabled:opacity-50"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-4">{children}</div>
         </div>
-        <div className="p-4">{children}</div>
       </div>
     </div>
   );

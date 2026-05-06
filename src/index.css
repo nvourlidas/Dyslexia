@@ -71,6 +71,14 @@ body {
   color: var(--color-text);
 }
 
+/* ---------- Landscape mobile: auto scale-down so the full UI fits ---------- */
+/* Targets phones in landscape (short viewport < 600px, not a wide desktop) */
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1024px) {
+  #root {
+    zoom: 0.82;
+  }
+}
+
 /* ---------- Utilities ---------- */
 @layer utilities {
   /* Cards */

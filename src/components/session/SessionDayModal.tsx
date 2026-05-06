@@ -124,10 +124,14 @@ function TeacherBlock({ group, students, onAttendance, onEditStudent, onDeleteSe
           Δεν υπάρχουν slots ακόμα — πρόσθεσε παρακάτω.
         </div>
       )}
-      {group.slots.map((s) => (
-        <SlotRow key={s.id} session={s} students={students}
-          onAttendance={onAttendance} onEditStudent={onEditStudent} onDelete={handleSlotDelete} />
-      ))}
+      <div className="overflow-x-auto">
+        <div className="min-w-[380px]">
+          {group.slots.map((s) => (
+            <SlotRow key={s.id} session={s} students={students}
+              onAttendance={onAttendance} onEditStudent={onEditStudent} onDelete={handleSlotDelete} />
+          ))}
+        </div>
+      </div>
 
       <div className="flex items-center gap-2 px-3 py-2 border-t border-border/10 bg-panel/30 flex-wrap">
         <span className="text-xs text-muted shrink-0">Νέο slot:</span>

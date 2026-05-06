@@ -38,7 +38,7 @@ export default function ParapemptikoConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* overlay */}
       <button
         type="button"
@@ -47,7 +47,7 @@ export default function ParapemptikoConfirmModal({
         onClick={() => (!busy ? onClose() : null)}
       />
 
-      <div className="relative mx-auto mt-24 w-[92%] max-w-md">
+      <div className="relative w-full max-w-md">
         <div
           className="rounded-2xl border border-border bg-panel shadow-xl"
           role="dialog"

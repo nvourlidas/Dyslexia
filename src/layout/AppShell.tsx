@@ -2,7 +2,7 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { NAV, type NavEntry } from '../_nav'
-import { ChevronDown, LogOut, Settings, User as UserIcon } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react'
 import { getInitialTheme, toggleTheme, type ThemeMode } from '../theme/theme'
 import { useAuth } from '@/auth/AuthProvider'
 
@@ -24,15 +24,89 @@ function getInitials(email?: string | null) {
   return (a + b).toUpperCase()
 }
 
+/** Shared sidebar content — used for both desktop sidebar and mobile drawer */
+function SidebarContent({
+  collapsed,
+  openGroups,
+  setOpenGroups,
+  pathname,
+  onToggleCollapse,
+  onClose,
+  isMobile,
+}: {
+  collapsed: boolean
+  openGroups: Set<string>
+  setOpenGroups: React.Dispatch<React.SetStateAction<Set<string>>>
+  pathname: string
+  onToggleCollapse?: () => void
+  onClose?: () => void
+  isMobile?: boolean
+}) {
+  return (
+    <>
+      <div className="flex h-16 shrink-0 items-center justify-between px-4">
+        <div className="font-semibold tracking-wide">
+          {collapsed && !isMobile ? 'CRM' : 'CRM Web'}
+        </div>
+        {isMobile ? (
+          <button
+            className="rounded-lg border border-border/15 bg-panel p-1.5 hover:opacity-90"
+            onClick={onClose}
+            aria-label="Κλείσιμο μενού"
+          >
+            <X size={16} />
+          </button>
+        ) : (
+          <button
+            className="rounded-lg border border-border/15 bg-panel px-2 py-1 text-xs hover:opacity-90"
+            onClick={onToggleCollapse}
+            aria-label="Toggle sidebar"
+          >
+            {collapsed ? '→' : '←'}
+          </button>
+        )}
+      </div>
+
+      <nav className="overflow-y-auto px-3 pb-4">
+        {NAV.map((entry, idx) => (
+          <Fragment key={`${isMobile ? 'mob' : 'desk'}-${entry.type}-${idx}`}>
+            <NavBlock
+              entry={entry}
+              collapsed={isMobile ? false : collapsed}
+              openGroups={openGroups}
+              setOpenGroups={setOpenGroups}
+              pathname={pathname}
+            />
+          </Fragment>
+        ))}
+      </nav>
+    </>
+  )
+}
+
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [mode, setMode] = useState<ThemeMode>(getInitialTheme())
   const location = useLocation()
   const navigate = useNavigate()
-
   const { user, signOut } = useAuth()
 
-  // keep groups with any active child opened by default
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
+
   const defaultOpenGroups = useMemo(() => {
     const open = new Set<string>()
     for (const entry of NAV) {
@@ -48,7 +122,6 @@ export default function AppShell() {
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(defaultOpenGroups)
 
-  // sync open groups when route changes (so active group auto-opens)
   if (defaultOpenGroups.size && openGroups.size === 0) {
     setOpenGroups(defaultOpenGroups)
   }
@@ -67,7 +140,6 @@ export default function AppShell() {
     function onEsc(e: KeyboardEvent) {
       if (e.key === 'Escape') setProfileOpen(false)
     }
-
     document.addEventListener('mousedown', onDocMouseDown)
     document.addEventListener('keydown', onEsc)
     return () => {
@@ -87,50 +159,65 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen bg-bg text-text">
+      {/* ── MOBILE DRAWER ── */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Drawer panel */}
+          <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border/15 bg-panel2">
+            <SidebarContent
+              collapsed={false}
+              openGroups={openGroups}
+              setOpenGroups={setOpenGroups}
+              pathname={location.pathname}
+              onClose={() => setMobileOpen(false)}
+              isMobile
+            />
+          </aside>
+        </div>
+      )}
+
       <div className="flex min-h-screen">
-        {/* SIDEBAR */}
-        <aside className={cx('sticky top-0 h-screen shrink-0 border-r border-border/15 bg-panel2', sidebarW)}>
-          <div className="flex h-16 items-center justify-between px-4">
-            <div className="font-semibold tracking-wide">
-              {collapsed ? 'CRM' : 'CRM Web'}
-            </div>
-
-            <button
-              className="rounded-lg border border-border/15 bg-panel px-2 py-1 text-xs hover:opacity-90"
-              onClick={() => setCollapsed((v) => !v)}
-              aria-label="Toggle sidebar"
-              title="Toggle sidebar"
-            >
-              {collapsed ? '→' : '←'}
-            </button>
-          </div>
-
-          <nav className="px-3 pb-4">
-            {NAV.map((entry, idx) => (
-              <Fragment key={`${entry.type}-${idx}`}>
-                <NavBlock
-                  entry={entry}
-                  collapsed={collapsed}
-                  openGroups={openGroups}
-                  setOpenGroups={setOpenGroups}
-                  pathname={location.pathname}
-                />
-              </Fragment>
-            ))}
-          </nav>
+        {/* ── DESKTOP SIDEBAR — hidden on mobile ── */}
+        <aside
+          className={cx(
+            'sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border/15 bg-panel2 transition-all duration-200 lg:flex',
+            sidebarW,
+          )}
+        >
+          <SidebarContent
+            collapsed={collapsed}
+            openGroups={openGroups}
+            setOpenGroups={setOpenGroups}
+            pathname={location.pathname}
+            onToggleCollapse={() => setCollapsed((v) => !v)}
+          />
         </aside>
 
-        {/* MAIN */}
+        {/* ── MAIN ── */}
         <div className="min-w-0 flex-1">
           {/* HEADER */}
           <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/15 bg-panel/80 px-4 backdrop-blur">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* Hamburger — mobile only */}
+              <button
+                className="rounded-lg border border-border/15 bg-panel p-1.5 hover:opacity-90 lg:hidden"
+                onClick={() => setMobileOpen((v) => !v)}
+                aria-label="Άνοιγμα μενού"
+              >
+                <Menu size={18} />
+              </button>
+
               <div className="text-sm font-semibold">CRM</div>
-              <div className="text-xs text-muted">Tenant App</div>
+              <div className="hidden text-xs text-muted sm:block">Tenant App</div>
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="btn" onClick={() => setMode(toggleTheme(mode))}>
+              <button className="btn hidden sm:inline-flex" onClick={() => setMode(toggleTheme(mode))}>
                 {mode === 'dark' ? 'Φωτεινό' : 'Σκοτεινό'}
               </button>
 
@@ -146,7 +233,7 @@ export default function AppShell() {
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/15 bg-panel text-xs font-semibold">
                     {getInitials(user?.email)}
                   </span>
-                  <span className="hidden max-w-55 truncate text-sm md:block">
+                  <span className="hidden max-w-[10rem] truncate text-sm lg:block">
                     {user?.email ?? 'Λογαριασμός'}
                   </span>
                   <ChevronDown size={16} className={cx('transition', profileOpen && 'rotate-180')} />
@@ -155,7 +242,7 @@ export default function AppShell() {
                 {profileOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 mt-2 w-72 rounded-2xl border border-border/15 bg-panel p-2 shadow-lg"
+                    className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-2xl border border-border/15 bg-panel p-2 shadow-lg"
                   >
                     <div className="px-2 py-2">
                       <div className="text-sm font-semibold">Λογαριασμός</div>
@@ -164,15 +251,22 @@ export default function AppShell() {
                       </div>
                     </div>
 
+                    {/* Theme toggle inside dropdown on mobile */}
+                    <div className="sm:hidden px-2 pb-2">
+                      <button
+                        className="btn w-full"
+                        onClick={() => { setMode(toggleTheme(mode)); setProfileOpen(false) }}
+                      >
+                        {mode === 'dark' ? 'Φωτεινό θέμα' : 'Σκοτεινό θέμα'}
+                      </button>
+                    </div>
+
                     <div className="my-2 border-t border-border/15/60" />
 
                     <button
                       type="button"
                       className="w-full rounded-xl px-3 py-2 text-left text-sm text-text hover:bg-panel2"
-                      onClick={() => {
-                        setProfileOpen(false)
-                        navigate('/profile')
-                      }}
+                      onClick={() => { setProfileOpen(false); navigate('/profile') }}
                     >
                       <span className="inline-flex items-center gap-2">
                         <UserIcon size={16} />
@@ -183,10 +277,7 @@ export default function AppShell() {
                     <button
                       type="button"
                       className="w-full rounded-xl px-3 py-2 text-left text-sm text-text hover:bg-panel2"
-                      onClick={() => {
-                        setProfileOpen(false)
-                        navigate('/themesettings')
-                      }}
+                      onClick={() => { setProfileOpen(false); navigate('/themesettings') }}
                     >
                       <span className="inline-flex items-center gap-2">
                         <Settings size={16} />
@@ -214,10 +305,8 @@ export default function AppShell() {
           </header>
 
           {/* CONTENT */}
-          <main className="p-4">
-            <div className="flex-1 overflow-auto">
-              <Outlet />
-            </div>
+          <main className="p-3 sm:p-4">
+            <Outlet />
           </main>
         </div>
       </div>
@@ -259,22 +348,23 @@ function NavBlock({
         className={({ isActive }) =>
           cx(
             'mb-1 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-            isActive ? 'border-border/15 bg-panel text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
+            isActive
+              ? 'border-border/15 bg-panel text-text'
+              : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
             collapsed && 'justify-center px-2',
           )
         }
         title={collapsed ? entry.label : undefined}
       >
         {Icon ? (
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
             <Icon size={18} />
           </span>
         ) : (
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
             {entry.label[0]}
           </span>
         )}
-
         {!collapsed && <span className="truncate">{entry.label}</span>}
       </NavLink>
     )
@@ -299,15 +389,16 @@ function NavBlock({
         }}
         className={cx(
           'flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-          anyActive ? 'border-border/15 bg-panel text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
+          anyActive
+            ? 'border-border/15 bg-panel text-text'
+            : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
           collapsed && 'justify-center px-2',
         )}
         title={collapsed ? entry.label : undefined}
       >
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/15 bg-panel">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/15 bg-panel">
           {GroupIcon ? <GroupIcon size={18} /> : entry.label[0]}
         </span>
-
         {!collapsed && (
           <>
             <span className="flex-1 truncate text-left">{entry.label}</span>
@@ -329,7 +420,9 @@ function NavBlock({
                 className={() =>
                   cx(
                     'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
-                    active ? 'border-border/15 bg-panel2 text-text' : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
+                    active
+                      ? 'border-border/15 bg-panel2 text-text'
+                      : 'border-transparent text-muted hover:border-border/15 hover:bg-panel/60 hover:text-text',
                   )
                 }
               >

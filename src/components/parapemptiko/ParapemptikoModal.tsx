@@ -34,27 +34,27 @@ export default function ParapemptikoModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* overlay */}
       <button
         type="button"
         aria-label="Close modal"
-        className="absolute inset-0 bg-black/60"
+        className="fixed inset-0 bg-black/60"
         onClick={() => (!lockClose ? onClose() : null)}
       />
 
       {/* modal */}
-      <div className="relative mx-auto mt-10 w-[92%] sm:mt-16">
+      <div className="relative flex min-h-full items-center justify-center p-4">
         <div
           className={[
-            "mx-auto rounded-2xl border border-border bg-panel shadow-xl",
+            "relative w-full rounded-2xl border border-border bg-panel shadow-xl",
             maxWidthClass,
           ].join(" ")}
           role="dialog"
           aria-modal="true"
           aria-label={title}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3 bg-panel rounded-t-2xl">
             <div>
               <div className="text-sm font-semibold text-text">{title}</div>
               <div className="text-xs text-muted">Συμπλήρωσε τα στοιχεία</div>

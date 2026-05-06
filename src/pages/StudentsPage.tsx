@@ -410,13 +410,13 @@ export default function StudentsPage() {
   const initialForm = useMemo(() => toForm(editRow), [editRow]);
 
   return (
-    <div className="min-h-full w-full p-6">
+    <div className="min-h-full w-full p-3 sm:p-4 md:p-6">
       <ToastHost toasts={toasts} dismiss={dismissToast} />
 
       <div className="flex flex-wrap justify-between">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <input
-            className="h-9 rounded-md border border-border/10 bg-panel2 px-3 text-sm placeholder:text-muted"
+            className="h-9 w-full rounded-md border border-border/10 bg-panel2 px-3 text-sm placeholder:text-muted sm:w-64"
             placeholder="Αναζήτηση μαθητών…"
             value={q}
             onChange={(e) => setQ(e.target.value)}

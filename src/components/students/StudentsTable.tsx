@@ -188,152 +188,99 @@ export default function StudentsTable({
 }) {
   return (
     <div className="w-full rounded-md border border-border/15 overflow-hidden">
-      {/* DESKTOP */}
-      <div className="hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-panel/60">
-              <tr className="text-left">
-                <Th className="w-10">
-                  <input
-                    type="checkbox"
-                    className="accent-primary"
-                    checked={allPageSelected}
-                    onChange={toggleSelectPage}
-                  />
-                </Th>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
+          <thead className="bg-panel/60">
+            <tr className="text-left">
+              <Th className="w-10">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={allPageSelected}
+                  onChange={toggleSelectPage}
+                />
+              </Th>
 
-                <Th>Ονοματεπώνυμο</Th>
-                <Th>Τηλέφωνο</Th>
+              <Th>Ονοματεπώνυμο</Th>
+              <Th>Τηλέφωνο</Th>
 
-                {isColVisible("email") && <Th>Email</Th>}
-                {isColVisible("birthdate") && <Th>Ημ. Γέννησης</Th>}
-                {isColVisible("city") && <Th>Πόλη</Th>}
-                {isColVisible("address") && <Th>Διεύθυνση</Th>}
-                {isColVisible("amka") && <Th>ΑΜΚΑ</Th>}
-                {isColVisible("gender") && <Th>Φύλο</Th>}
-                {isColVisible("parent_name") && <Th>Γονέας</Th>}
-                {isColVisible("parent_phone1") && <Th>Τηλ. Γονέα 1</Th>}
-                {isColVisible("parent_phone2") && <Th>Τηλ. Γονέα 2</Th>}
-                {isColVisible("doctor_visit") && <Th>Επίσκεψη Γιατρού</Th>}
-                {isColVisible("doctor_name") && <Th>Γιατρός</Th>}
-                {isColVisible("created_at") && <Th>Ημ. Δημιουργίας</Th>}
+              {isColVisible("email") && <Th>Email</Th>}
+              {isColVisible("birthdate") && <Th>Ημ. Γέννησης</Th>}
+              {isColVisible("city") && <Th>Πόλη</Th>}
+              {isColVisible("address") && <Th>Διεύθυνση</Th>}
+              {isColVisible("amka") && <Th>ΑΜΚΑ</Th>}
+              {isColVisible("gender") && <Th>Φύλο</Th>}
+              {isColVisible("parent_name") && <Th>Γονέας</Th>}
+              {isColVisible("parent_phone1") && <Th>Τηλ. Γονέα 1</Th>}
+              {isColVisible("parent_phone2") && <Th>Τηλ. Γονέα 2</Th>}
+              {isColVisible("doctor_visit") && <Th>Επίσκεψη Γιατρού</Th>}
+              {isColVisible("doctor_name") && <Th>Γιατρός</Th>}
+              {isColVisible("created_at") && <Th>Ημ. Δημιουργίας</Th>}
 
-                <Th>Κατάσταση</Th>
-                <Th className="text-right pr-3">Ενέργειες</Th>
+              <Th>Κατάσταση</Th>
+              <Th className="text-right pr-3">Ενέργειες</Th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading && (
+              <tr>
+                <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>
+                  Loading…
+                </td>
               </tr>
-            </thead>
+            )}
 
-            <tbody>
-              {loading && (
-                <tr>
-                  <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>
-                    Loading…
-                  </td>
-                </tr>
-              )}
+            {!loading && filteredLength === 0 && (
+              <tr>
+                <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>
+                  Κανένας μαθητής
+                </td>
+              </tr>
+            )}
 
-              {!loading && filteredLength === 0 && (
-                <tr>
-                  <td className="px-3 py-4 opacity-60" colSpan={desktopColCount}>
-                    Κανένας μαθητής
-                  </td>
-                </tr>
-              )}
+            {!loading &&
+              filteredLength > 0 &&
+              paginated.map((s) => {
+                const fullName = `${s.lastname ?? ""} ${s.name ?? ""}`.trim() || "—";
 
-              {!loading &&
-                filteredLength > 0 &&
-                paginated.map((s) => {
-                  const fullName = `${s.lastname ?? ""} ${s.name ?? ""}`.trim() || "—";
+                return (
+                  <tr
+                    key={s.user_id}
+                    className="border-t border-border/5 hover:bg-panel/10"
+                  >
+                    <Td>
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={selectedIds.includes(s.user_id)}
+                        onChange={() => toggleSelect(s.user_id)}
+                      />
+                    </Td>
 
-                  return (
-                    <tr
-                      key={s.user_id}
-                      className="border-t border-border/5 hover:bg-panel/10"
-                    >
-                      <Td>
-                        <input
-                          type="checkbox"
-                          className="accent-primary"
-                          checked={selectedIds.includes(s.user_id)}
-                          onChange={() => toggleSelect(s.user_id)}
-                        />
-                      </Td>
+                    <Td>
+                      <div className="font-medium whitespace-nowrap">{fullName}</div>
+                    </Td>
 
-                      <Td>
-                        <div className="font-medium">{fullName}</div>
-                      </Td>
+                    <Td className="whitespace-nowrap">{s.phone ?? "—"}</Td>
 
-                      <Td>{s.phone ?? "—"}</Td>
+                    {isColVisible("email") && <Td>{s.email ?? "—"}</Td>}
+                    {isColVisible("birthdate") && <Td className="whitespace-nowrap">{formatDateDMY(s.birthdate)}</Td>}
+                    {isColVisible("city") && <Td>{s.city ?? "—"}</Td>}
+                    {isColVisible("address") && <Td>{s.address ?? "—"}</Td>}
+                    {isColVisible("amka") && <Td className="whitespace-nowrap">{s.amka ?? "—"}</Td>}
+                    {isColVisible("gender") && <Td>{s.gender ?? "—"}</Td>}
+                    {isColVisible("parent_name") && <Td className="whitespace-nowrap">{s.parent_name ?? "—"}</Td>}
+                    {isColVisible("parent_phone1") && <Td className="whitespace-nowrap">{s.parent_phone1 ?? "—"}</Td>}
+                    {isColVisible("parent_phone2") && <Td className="whitespace-nowrap">{s.parent_phone2 ?? "—"}</Td>}
+                    {isColVisible("doctor_visit") && (
+                      <Td>{s.doctor_visit ? "Ναι" : "Όχι"}</Td>
+                    )}
+                    {isColVisible("doctor_name") && <Td>{s.doctor_name ?? "—"}</Td>}
+                    {isColVisible("created_at") && <Td className="whitespace-nowrap">{formatDateDMY(s.created_at)}</Td>}
 
-                      {isColVisible("email") && <Td>{s.email ?? "—"}</Td>}
-                      {isColVisible("birthdate") && <Td>{formatDateDMY(s.birthdate)}</Td>}
-                      {isColVisible("city") && <Td>{s.city ?? "—"}</Td>}
-                      {isColVisible("address") && <Td>{s.address ?? "—"}</Td>}
-                      {isColVisible("amka") && <Td>{s.amka ?? "—"}</Td>}
-                      {isColVisible("gender") && <Td>{s.gender ?? "—"}</Td>}
-                      {isColVisible("parent_name") && <Td>{s.parent_name ?? "—"}</Td>}
-                      {isColVisible("parent_phone1") && <Td>{s.parent_phone1 ?? "—"}</Td>}
-                      {isColVisible("parent_phone2") && <Td>{s.parent_phone2 ?? "—"}</Td>}
-                      {isColVisible("doctor_visit") && (
-                        <Td>{s.doctor_visit ? "Ναι" : "Όχι"}</Td>
-                      )}
-                      {isColVisible("doctor_name") && <Td>{s.doctor_name ?? "—"}</Td>}
-                      {isColVisible("created_at") && <Td>{formatDateDMY(s.created_at)}</Td>}
-
-                      <Td>
-                        <div className="flex items-center gap-1.5">
-                          <ActiveToggle
-                            active={s.active}
-                            busy={togglingActiveId === s.user_id}
-                            onToggle={() => onToggleActive(s)}
-                          />
-                          <span className={`text-xs ${s.active ? "text-green-500" : "text-muted"}`}>
-                            {s.active ? "Ενεργός" : "Ανενεργός"}
-                          </span>
-                        </div>
-                      </Td>
-
-                      <Td className="text-right space-x-1 pr-3">
-                        <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(s)} />
-                        <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(s)} />
-                        <DeleteButton tenantId={tenantId} id={s.user_id} onDeleted={onDeleted} />
-                      </Td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* MOBILE */}
-      <div className="md:hidden">
-        {loading && <div className="px-3 py-4 text-sm opacity-60">Loading…</div>}
-
-        {!loading && filteredLength === 0 && (
-          <div className="px-3 py-4 text-sm opacity-60">Κανένας μαθητής</div>
-        )}
-
-        {!loading &&
-          filteredLength > 0 &&
-          paginated.map((s) => {
-            const fullName = `${s.lastname ?? ""} ${s.name ?? ""}`.trim() || "—";
-
-            return (
-              <div key={s.user_id} className="border-t border-border/10 bg-panel/5 px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1 accent-primary"
-                      checked={selectedIds.includes(s.user_id)}
-                      onChange={() => toggleSelect(s.user_id)}
-                    />
-                    <div>
-                      <div className="font-medium text-sm">{fullName}</div>
-                      <div className="text-xs text-muted">{s.phone ?? "—"}</div>
-                      <div className="mt-1 flex items-center gap-1.5">
+                    <Td>
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <ActiveToggle
                           active={s.active}
                           busy={togglingActiveId === s.user_id}
@@ -343,97 +290,53 @@ export default function StudentsTable({
                           {s.active ? "Ενεργός" : "Ανενεργός"}
                         </span>
                       </div>
-                    </div>
-                  </div>
+                    </Td>
 
-                  <div className="flex items-center gap-2">
-                    <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(s)} />
-                    <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(s)} />
-                    <DeleteButton tenantId={tenantId} id={s.user_id} onDeleted={onDeleted} />
-                  </div>
-                </div>
-
-                <div className="mt-2 space-y-1 text-xs">
-                  {isColVisible("email") && (
-                    <div>
-                      <span className="opacity-70">Email: </span>
-                      {s.email ?? "—"}
-                    </div>
-                  )}
-                  {isColVisible("amka") && (
-                    <div>
-                      <span className="opacity-70">ΑΜΚΑ: </span>
-                      {s.amka ?? "—"}
-                    </div>
-                  )}
-                  {isColVisible("city") && (
-                    <div>
-                      <span className="opacity-70">Πόλη: </span>
-                      {s.city ?? "—"}
-                    </div>
-                  )}
-                  {isColVisible("birthdate") && (
-                    <div>
-                      <span className="opacity-70">Ημ. Γέννησης: </span>
-                      {formatDateDMY(s.birthdate)}
-                    </div>
-                  )}
-                  {isColVisible("created_at") && (
-                    <div className="opacity-70">Δημιουργήθηκε: {formatDateDMY(s.created_at)}</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    <Td className="text-right space-x-1 pr-3 whitespace-nowrap">
+                      <IconButton icon={Eye} label="Λεπτομέρειες" onClick={() => onEdit(s)} />
+                      <IconButton icon={Pencil} label="Επεξεργασία" onClick={() => onEdit(s)} />
+                      <DeleteButton tenantId={tenantId} id={s.user_id} onDeleted={onDeleted} />
+                    </Td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
       </div>
 
       {/* Pagination footer */}
       {!loading && filteredLength > 0 && (
-        <div className="flex items-center justify-between px-3 py-2 text-xs text-muted border-t border-border/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted border-t border-border/10">
           <div>
-            Εμφάνιση <span className="font-semibold">{startIdx}</span>
-            {filteredLength > 0 && (
-              <>
-                –<span className="font-semibold">{endIdx}</span>
-              </>
-            )}{" "}
-            από <span className="font-semibold">{filteredLength}</span>
+            {startIdx}–{endIdx} από {filteredLength}
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <span>Γραμμές ανά σελίδα:</span>
-              <select
-                className="bg-transparent border border-border/10 rounded px-1 py-0.5"
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              className="bg-transparent border border-border/10 rounded px-1 py-0.5"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+            >
+              <option value={10}>10 / σελ.</option>
+              <option value={25}>25 / σελ.</option>
+              <option value={50}>50 / σελ.</option>
+            </select>
 
-            <div className="flex items-center gap-2">
-              <button
-                className="px-2 py-1 rounded border border-border/10 disabled:opacity-40"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Προηγ.
-              </button>
-              <span>
-                Σελίδα <span className="font-semibold">{page}</span> από{" "}
-                <span className="font-semibold">{pageCount}</span>
-              </span>
-              <button
-                className="px-2 py-1 rounded border border-border/10 disabled:opacity-40"
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                disabled={page === pageCount}
-              >
-                Επόμενο
-              </button>
-            </div>
+            <button
+              className="px-2 py-1 rounded border border-border/10 disabled:opacity-40"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              ‹
+            </button>
+            <span>{page} / {pageCount}</span>
+            <button
+              className="px-2 py-1 rounded border border-border/10 disabled:opacity-40"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={page === pageCount}
+            >
+              ›
+            </button>
           </div>
         </div>
       )}

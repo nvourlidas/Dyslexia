@@ -254,7 +254,7 @@ export default function SessionsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-full w-full p-6">
+    <div className="min-h-full w-full p-3 sm:p-4 md:p-6">
       <ToastHost toasts={toasts} dismiss={dismissToast} />
 
       {/* Header */}
@@ -288,50 +288,52 @@ export default function SessionsPage() {
         </div>
       </div>
 
-      {/* Calendar grid */}
-      <div className="rounded-lg border border-border/15 overflow-hidden">
-        <div className="grid grid-cols-7 bg-panel2/60">
-          {DAYS.map((d) => (
-            <div key={d} className="px-2 py-2 text-center text-xs font-medium text-muted">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 divide-x divide-y divide-border/10">
-          {calCells.map((cell, idx) => {
-            const dayTeachers = cell.dateKey ? getDayTeachers(cell.dateKey) : [];
-            const tod = cell.dateKey ? isToday(cell.dateKey) : false;
-            return (
-              <div
-                key={idx}
-                className={`min-h-[100px] p-1.5 transition-colors ${
-                  cell.cur ? "bg-panel cursor-pointer hover:bg-panel2/50" : "bg-panel/30 opacity-40"
-                }`}
-                onClick={() => cell.dateKey && setModalDate(cell.dateKey)}
-              >
-                <div className="flex items-center justify-start mb-1">
-                  <span className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${
-                    tod ? "bg-primary text-white" : cell.cur ? "text-text" : "text-muted"
-                  }`}>
-                    {cell.d || ""}
-                  </span>
+      {/* Calendar grid — horizontally scrollable on mobile */}
+      <div className="overflow-x-auto rounded-lg border border-border/15">
+        <div className="min-w-[560px]">
+          <div className="grid grid-cols-7 bg-panel2/60">
+            {DAYS.map((d) => (
+              <div key={d} className="px-2 py-2 text-center text-xs font-medium text-muted">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 divide-x divide-y divide-border/10">
+            {calCells.map((cell, idx) => {
+              const dayTeachers = cell.dateKey ? getDayTeachers(cell.dateKey) : [];
+              const tod = cell.dateKey ? isToday(cell.dateKey) : false;
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[70px] p-1 sm:min-h-[100px] sm:p-1.5 transition-colors ${
+                    cell.cur ? "bg-panel cursor-pointer hover:bg-panel2/50" : "bg-panel/30 opacity-40"
+                  }`}
+                  onClick={() => cell.dateKey && setModalDate(cell.dateKey)}
+                >
+                  <div className="flex items-center justify-start mb-1">
+                    <span className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${
+                      tod ? "bg-primary text-white" : cell.cur ? "text-text" : "text-muted"
+                    }`}>
+                      {cell.d || ""}
+                    </span>
+                  </div>
+                  {dayTeachers.slice(0, 3).map((s) => {
+                    const col = PALETTE[colorMap[s.teacher_id] ?? 0];
+                    return (
+                      <div
+                        key={s.teacher_id}
+                        className="text-[10px] px-1.5 py-0.5 rounded mb-0.5 truncate"
+                        style={{ background: col.bg, color: col.text }}
+                      >
+                        {s.teacher?.last_name ?? "—"}
+                      </div>
+                    );
+                  })}
+                  {dayTeachers.length > 3 && (
+                    <div className="text-[10px] text-muted px-1">+{dayTeachers.length - 3} ακόμα</div>
+                  )}
                 </div>
-                {dayTeachers.slice(0, 3).map((s) => {
-                  const col = PALETTE[colorMap[s.teacher_id] ?? 0];
-                  return (
-                    <div
-                      key={s.teacher_id}
-                      className="text-[10px] px-1.5 py-0.5 rounded mb-0.5 truncate"
-                      style={{ background: col.bg, color: col.text }}
-                    >
-                      {s.teacher?.last_name ?? "—"}
-                    </div>
-                  );
-                })}
-                {dayTeachers.length > 3 && (
-                  <div className="text-[10px] text-muted px-1">+{dayTeachers.length - 3} ακόμα</div>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
