@@ -1,4 +1,4 @@
-// supabase/functions/doc_opinion-delete/index.ts
+// supabase/functions/parapemptiko-delete/index.ts
 import { adminClient } from "../_shared/supabase.ts";
 import { postHandler, ok, fail } from "../_shared/handler.ts";
 
@@ -8,7 +8,7 @@ postHandler(async (payload, tenantId, _, req) => {
 
   const admin = adminClient();
   const { error } = await admin
-    .from("doc_opinion")
+    .from("parapemtiko")
     .delete()
     .eq("tenant_id", tenantId)
     .eq("id", String(id));

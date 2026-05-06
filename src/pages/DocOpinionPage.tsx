@@ -49,21 +49,7 @@ const DOC_ALL_COLUMNS: { key: DocOpinionColKey; label: string }[] = [
 ];
 
 const DOC_DEFAULT_VISIBLE: DocOpinionColKey[] = ["amka", "code", "code_diagnosis", "start_date", "end_date", "notes"];
-
 const DOC_ALL_KEYS = DOC_ALL_COLUMNS.map((c) => c.key) as DocOpinionColKey[];
-
-async function getMyTenantId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("tenant_id")
-    .eq("id", userId)
-    .single();
-
-  if (error || !data?.tenant_id) {
-    throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
-  }
-  return data.tenant_id as string;
-}
 
 function toForm(r?: DocOpinionRow | null, linkedIds: string[] = []): DocOpinionForm {
   if (!r) return { ...EMPTY_FORM };
@@ -77,12 +63,20 @@ function toForm(r?: DocOpinionRow | null, linkedIds: string[] = []): DocOpinionF
   };
 }
 
+async function getMyTenantId(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", userId)
+    .single();
+  if (error || !data?.tenant_id) throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
+  return data.tenant_id as string;
+}
 
 export default function DocOpinionPage() {
   const { user } = useAuth();
 
   const [tenantId, setTenantId] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,11 +95,7 @@ export default function DocOpinionPage() {
   const [editing, setEditing] = useState<DocOpinionRow | null>(null);
   const [form, setForm] = useState<DocOpinionForm>({ ...EMPTY_FORM });
   const [studentParapemptika, setStudentParapemptika] = useState<{
-    id: string;
-    title: string;
-    code: string | null;
-    start_date: string;
-    end_date: string | null;
+    id: string; title: string; code: string | null; start_date: string; end_date: string | null;
   }[]>([]);
 
   const PAGE_SIZE = 15;
@@ -129,7 +119,9 @@ export default function DocOpinionPage() {
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
   const toggleSelectPage = () => {
     setSelectedIds((prev) =>
-      allPageSelected ? prev.filter((id) => !pageIds.includes(id)) : [...prev, ...pageIds.filter((id) => !prev.includes(id))]
+      allPageSelected
+        ? prev.filter((id) => !pageIds.includes(id))
+        : [...prev, ...pageIds.filter((id) => !prev.includes(id))]
     );
   };
 
@@ -141,12 +133,9 @@ export default function DocOpinionPage() {
       tenantId,
     });
 
-  const SELECT =
-    "id,tenant_id,student_id,start_date,end_date,notes,status,created_at,updated_at,student:students(name,lastname,amka),parapemptika:parapemtiko(code,code_diagnosis)";
-
+  // Boot: load tenant id
   useEffect(() => {
     let cancelled = false;
-
     async function boot() {
       if (!user?.id) return;
       try {
@@ -156,11 +145,8 @@ export default function DocOpinionPage() {
         if (!cancelled) setError(e?.message ?? "Σφάλμα tenant.");
       }
     }
-
     boot();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   async function fetchStudents(tid: string) {
@@ -170,13 +156,7 @@ export default function DocOpinionPage() {
       .eq("tenant_id", tid)
       .eq("active", true)
       .order("lastname", { ascending: true });
-
-    if (error) {
-      setError(error.message);
-      setStudents([]);
-      return;
-    }
-
+    if (error) { setError(error.message); setStudents([]); return; }
     setStudents((data ?? []) as StudentRow[]);
   }
 
@@ -190,7 +170,6 @@ export default function DocOpinionPage() {
   }
 
   async function fetchDocOpinions(
-    tid: string,
     p = page,
     q = query,
     sf = statusFilter,
@@ -199,112 +178,55 @@ export default function DocOpinionPage() {
   ) {
     setLoading(true);
     setError(null);
-
-    const from = (p - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    let req = supabase
-      .from("doc_opinion")
-      .select(SELECT, { count: "exact" })
-      .eq("tenant_id", tid);
-
-    const qq = q.trim();
-    if (qq) {
-      const safe = qq.replace(/,/g, " ");
-      const { data: matchingStudents } = await supabase
-        .from("students")
-        .select("user_id")
-        .eq("tenant_id", tid)
-        .or(`name.ilike.%${safe}%,lastname.ilike.%${safe}%,amka.ilike.%${safe}%`);
-      const studentIds = (matchingStudents ?? []).map((s: any) => s.user_id);
-
-      const { data: matchingParapemptika } = await supabase
-        .from("parapemtiko")
-        .select("doc_opinion_id")
-        .eq("tenant_id", tid)
-        .not("doc_opinion_id", "is", null)
-        .or(`code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`);
-      const docOpinionIds = [
-        ...new Set(
-          (matchingParapemptika ?? []).map((p: any) => p.doc_opinion_id).filter(Boolean)
-        ),
-      ];
-
-      let orParts = `notes.ilike.%${safe}%`;
-      if (studentIds.length > 0) {
-        orParts += `,student_id.in.(${studentIds.join(",")})`;
-      }
-      if (docOpinionIds.length > 0) {
-        orParts += `,id.in.(${docOpinionIds.join(",")})`;
-      }
-      req = req.or(orParts);
-    }
-
-    if (sf !== "all") req = req.eq("status", sf);
-    if (af) req = req.eq("student_id", af);
-
-    const today = new Date().toISOString().slice(0, 10);
-    if (edf === "expired") req = req.not("end_date", "is", null).lt("end_date", today);
-    if (edf === "active") req = req.or(`end_date.is.null,end_date.gte.${today}`);
-    if (edf === "none") req = req.is("end_date", null);
-
-    const { data, error, count } = await req
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      setError(error.message);
+    try {
+      const result = await callFunction<{ rows: DocOpinionRow[]; total: number }>(
+        "doc_opinion-list",
+        { page: p, page_size: PAGE_SIZE, query: q, status_filter: sf, student_id_filter: af, end_date_filter: edf }
+      );
+      setRows(result.rows);
+      setTotal(result.total);
+    } catch (e: any) {
+      setError(e?.message ?? "Σφάλμα φόρτωσης.");
       setRows([]);
       setTotal(0);
-    } else {
-      const transformed = (data ?? []).map((item: any) => ({
-        ...item,
-        student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null,
-        parapemptika: Array.isArray(item.parapemptika) ? item.parapemptika : [],
-      })) as DocOpinionRow[];
-
-      setRows(transformed);
-      setTotal(count ?? 0);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   useEffect(() => {
     if (!tenantId) return;
     fetchStudents(tenantId);
     fetchRecordStudentIds(tenantId);
-    fetchDocOpinions(tenantId, page, query);
+    fetchDocOpinions(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, page]);
 
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);
-    fetchDocOpinions(tenantId, 1, query);
+    fetchDocOpinions(1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, tenantId]);
 
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);
-    fetchDocOpinions(tenantId, 1, query, statusFilter, amkaFilter, endDateFilter);
+    fetchDocOpinions(1, query, statusFilter, amkaFilter, endDateFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, amkaFilter, endDateFilter]);
 
   async function bulkDelete() {
-    if (!tenantId || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
     setBulkDeleting(true);
     try {
       await callFunction("doc_opinion-bulk-delete", { ids: selectedIds });
-      const deletedCount = selectedIds.length;
+      const newTotal = Math.max(0, total - selectedIds.length);
+      const nextPage = Math.min(page, Math.max(1, Math.ceil(newTotal / PAGE_SIZE)));
       clearSelection();
       setBulkDeleteOpen(false);
-      const newTotal = Math.max(0, total - deletedCount);
-      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      const nextPage = Math.min(page, newTotalPages);
       setPage(nextPage);
-      fetchDocOpinions(tenantId, nextPage, query);
+      await fetchDocOpinions(nextPage);
     } catch (e: any) {
       setError(e?.message ?? "Σφάλμα διαγραφής.");
     } finally {
@@ -314,6 +236,8 @@ export default function DocOpinionPage() {
 
   async function exportExcel() {
     if (!tenantId) return;
+    const SELECT =
+      "id,tenant_id,student_id,start_date,end_date,notes,status,created_at,updated_at,student:students(name,lastname,amka),parapemptika:parapemtiko(code,code_diagnosis)";
 
     const { data, error } = await supabase
       .from("doc_opinion")
@@ -323,18 +247,16 @@ export default function DocOpinionPage() {
 
     if (error || !data) return;
 
-    const allRows = (data ?? []).map((item: any) => ({
-      ...item,
-      student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null,
-      parapemptika: Array.isArray(item.parapemptika) ? item.parapemptika : [],
-    })) as DocOpinionRow[];
+    const exportData = data.map((item: any) => {
+      const r = {
+        ...item,
+        student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null,
+        parapemptika: Array.isArray(item.parapemptika) ? item.parapemptika : [],
+      } as DocOpinionRow;
 
-    const exportData = allRows.map((r) => {
-      const fullName =
-        r.student?.lastname || r.student?.name
-          ? `${r.student?.lastname ?? ""} ${r.student?.name ?? ""}`.trim()
-          : r.student_id;
-
+      const fullName = r.student?.lastname || r.student?.name
+        ? `${r.student?.lastname ?? ""} ${r.student?.name ?? ""}`.trim()
+        : r.student_id;
       const codes = (r.parapemptika ?? []).map((p) => p.code).filter(Boolean).join(", ");
       const codeDiagnoses = (r.parapemptika ?? []).map((p) => p.code_diagnosis).filter(Boolean).join(", ");
 
@@ -353,13 +275,13 @@ export default function DocOpinionPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Γνωματεύσεις");
     const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([buf], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, `doc_opinions_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(
+      new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      `doc_opinions_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   }
 
-  async function fetchStudentParapemptika(studentId: string, _docOpinionId?: string) {
+  async function fetchStudentParapemptika(studentId: string) {
     if (!tenantId || !studentId) { setStudentParapemptika([]); return; }
     const { data } = await supabase
       .from("parapemtiko")
@@ -379,7 +301,6 @@ export default function DocOpinionPage() {
 
   async function openEdit(r: DocOpinionRow) {
     setEditing(r);
-    // fetch parapemptika linked to this doc_opinion
     const { data } = await supabase
       .from("parapemtiko")
       .select("id")
@@ -387,7 +308,7 @@ export default function DocOpinionPage() {
       .eq("doc_opinion_id", r.id);
     const linkedIds = (data ?? []).map((p: any) => p.id);
     setForm(toForm(r, linkedIds));
-    await fetchStudentParapemptika(r.student_id ?? "", r.id);
+    await fetchStudentParapemptika(r.student_id ?? "");
     setModalOpen(true);
   }
 
@@ -410,13 +331,8 @@ export default function DocOpinionPage() {
   }
 
   async function onSave() {
-    if (!tenantId) return;
-
     const v = validate(form);
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
 
     setSaving(true);
     setError(null);
@@ -431,10 +347,9 @@ export default function DocOpinionPage() {
           status: form.status,
           parapemptiko_ids: form.parapemptiko_ids,
         });
-
-        closeModal();
         setPage(1);
-        await fetchDocOpinions(tenantId, 1, query);
+        closeModal();
+        await fetchDocOpinions(1);
       } else {
         await callFunction("doc_opinion-update", {
           id: editing.id,
@@ -445,18 +360,15 @@ export default function DocOpinionPage() {
           status: form.status,
           parapemptiko_ids: form.parapemptiko_ids,
         });
-
         closeModal();
-        fetchDocOpinions(tenantId, page, query);
+        await fetchDocOpinions(page);
       }
     } catch (e: any) {
-      const code = e?.code as string | undefined;
-
+      const code = (e as any)?.code as string | undefined;
       if (code === "SUBSCRIPTION_INACTIVE") {
         setError(e?.message ?? "Απαιτείται ενεργή συνδρομή.");
         return;
       }
-
       setError(e?.message ?? "Σφάλμα αποθήκευσης.");
     } finally {
       setSaving(false);
@@ -475,26 +387,16 @@ export default function DocOpinionPage() {
   }
 
   async function confirmDelete() {
-    if (!tenantId || !deleteRow) return;
+    if (!deleteRow) return;
     setDeleting(true);
     setError(null);
-
     try {
-      const { error } = await supabase
-        .from("doc_opinion")
-        .delete()
-        .eq("tenant_id", tenantId)
-        .eq("id", deleteRow.id);
-
-      if (error) throw error;
-
+      await callFunction("doc_opinion-delete", { id: deleteRow.id });
       const newTotal = Math.max(0, total - 1);
-      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      const nextPage = Math.min(page, newTotalPages);
+      const nextPage = Math.min(page, Math.max(1, Math.ceil(newTotal / PAGE_SIZE)));
       setPage(nextPage);
-
       closeDelete();
-      fetchDocOpinions(tenantId, nextPage, query);
+      await fetchDocOpinions(nextPage);
     } catch (e: any) {
       setError(e?.message ?? "Σφάλμα διαγραφής.");
     } finally {
@@ -613,29 +515,18 @@ export default function DocOpinionPage() {
         toggleSelectPage={toggleSelectPage}
       />
 
-      {/* Pagination */}
       <div className="mt-3 flex items-center justify-between text-sm">
         <div className="text-muted">
           Σύνολο: <span className="text-text">{total}</span>
         </div>
-
         <div className="flex items-center gap-2">
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-          >
+          <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
             Prev
           </button>
           <div className="text-muted">
-            Σελίδα <span className="text-text">{page}</span> /{" "}
-            <span className="text-text">{totalPages}</span>
+            Σελίδα <span className="text-text">{page}</span> / <span className="text-text">{totalPages}</span>
           </div>
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
+          <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
             Next
           </button>
         </div>
@@ -650,7 +541,6 @@ export default function DocOpinionPage() {
         onClose={() => setBulkDeleteOpen(false)}
       />
 
-      {/* Create / Edit Modal */}
       <DocOpinionModal
         open={modalOpen}
         title={editing ? "Επεξεργασία γνωμάτευσης" : "Προσθήκη γνωμάτευσης"}
@@ -668,7 +558,7 @@ export default function DocOpinionPage() {
                 const newId = e.target.value;
                 setField("student_id", newId);
                 setField("parapemptiko_ids", []);
-                if (newId) fetchStudentParapemptika(newId, editing?.id);
+                if (newId) fetchStudentParapemptika(newId);
                 else setStudentParapemptika([]);
               }}
             >
@@ -688,10 +578,7 @@ export default function DocOpinionPage() {
                 {studentParapemptika.map((p) => {
                   const checked = form.parapemptiko_ids.includes(p.id);
                   return (
-                    <label
-                      key={p.id}
-                      className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-panel2"
-                    >
+                    <label key={p.id} className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-panel2">
                       <input
                         type="checkbox"
                         className="accent-primary mt-0.5 shrink-0"
@@ -722,31 +609,17 @@ export default function DocOpinionPage() {
 
           <div>
             <div className="mb-1 text-xs text-muted">Ημ. Έναρξης *</div>
-            <input
-              className="input"
-              type="date"
-              value={form.start_date}
-              onChange={(e) => setField("start_date", e.target.value)}
-            />
+            <input className="input" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Ημ. Λήξης</div>
-            <input
-              className="input"
-              type="date"
-              value={form.end_date}
-              onChange={(e) => setField("end_date", e.target.value)}
-            />
+            <input className="input" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Κατάσταση</div>
-            <select
-              className="input"
-              value={form.status}
-              onChange={(e) => setField("status", e.target.value)}
-            >
+            <select className="input" value={form.status} onChange={(e) => setField("status", e.target.value)}>
               <option value="pending">Εκκρεμεί</option>
               <option value="completed">Ολοκληρωμένη</option>
             </select>
@@ -754,25 +627,18 @@ export default function DocOpinionPage() {
 
           <div className="md:col-span-2">
             <div className="mb-1 text-xs text-muted">Σημειώσεις</div>
-            <textarea
-              className="input min-h-24"
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-            />
+            <textarea className="input min-h-24" value={form.notes} onChange={(e) => setField("notes", e.target.value)} />
           </div>
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn" onClick={closeModal} disabled={saving}>
-            Άκυρο
-          </button>
+          <button className="btn" onClick={closeModal} disabled={saving}>Άκυρο</button>
           <button className="btn btn-primary" onClick={onSave} disabled={saving}>
             {saving ? "Αποθήκευση..." : "Αποθήκευση"}
           </button>
         </div>
       </DocOpinionModal>
 
-      {/* Delete confirm */}
       <DocOpinionConfirmModal
         open={deleteOpen}
         title="Διαγραφή γνωμάτευσης"

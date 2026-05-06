@@ -54,19 +54,19 @@ const PARAP_ALL_COLUMNS: { key: ParapemptikoColKey; label: string }[] = [
 ];
 
 const PARAP_DEFAULT_VISIBLE: ParapemptikoColKey[] = ["amka", "code", "code_diagnosis", "end_date"];
-
 const PARAP_ALL_KEYS = PARAP_ALL_COLUMNS.map((c) => c.key) as ParapemptikoColKey[];
 
-async function getMyTenantId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("tenant_id")
-    .eq("id", userId)
-    .single();
-
-  if (error || !data?.tenant_id)
-    throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
-  return data.tenant_id as string;
+function formPayload(f: ParapemtikoForm) {
+  return {
+    title: f.title.trim(),
+    student_id: f.student_id || null,
+    code: f.code.trim() || null,
+    code_diagnosis: f.code_diagnosis.trim() || null,
+    start_date: f.start_date,
+    end_date: f.end_date || null,
+    status: f.status,
+    notes: f.notes.trim() || null,
+  };
 }
 
 function toForm(r?: ParapemtikoRow | null): ParapemtikoForm {
@@ -83,25 +83,21 @@ function toForm(r?: ParapemtikoRow | null): ParapemtikoForm {
   };
 }
 
-function formToDb(f: ParapemtikoForm) {
-  return {
-    title: f.title.trim(),
-    student_id: f.student_id || null,
-    code: f.code.trim() || null,
-    code_diagnosis: f.code_diagnosis.trim() || null,
-    start_date: f.start_date,
-    end_date: f.end_date || null,
-    status: f.status,
-    notes: f.notes.trim() || null,
-    updated_at: new Date().toISOString(),
-  };
+async function getMyTenantId(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", userId)
+    .single();
+  if (error || !data?.tenant_id)
+    throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
+  return data.tenant_id as string;
 }
 
 export default function ParapemptikaPage() {
   const { user } = useAuth();
 
   const [tenantId, setTenantId] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +137,9 @@ export default function ParapemptikaPage() {
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
   const toggleSelectPage = () => {
     setSelectedIds((prev) =>
-      allPageSelected ? prev.filter((id) => !pageIds.includes(id)) : [...prev, ...pageIds.filter((id) => !prev.includes(id))]
+      allPageSelected
+        ? prev.filter((id) => !pageIds.includes(id))
+        : [...prev, ...pageIds.filter((id) => !prev.includes(id))]
     );
   };
 
@@ -153,9 +151,7 @@ export default function ParapemptikaPage() {
       tenantId,
     });
 
-  const PARAP_SELECT =
-    "id,tenant_id,title,student_id,doc_opinion_id,code,code_diagnosis,start_date,end_date,status,notes,created_at,updated_at,student:students(name,lastname,amka)";
-
+  // Boot: load tenant id
   useEffect(() => {
     let cancelled = false;
     async function boot() {
@@ -169,9 +165,7 @@ export default function ParapemptikaPage() {
       }
     }
     boot();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   async function fetchStudents(tid: string) {
@@ -181,7 +175,6 @@ export default function ParapemptikaPage() {
       .eq("tenant_id", tid)
       .eq("active", true)
       .order("lastname", { ascending: true });
-
     if (error) { setError(error.message); return; }
     setStudents((data ?? []) as StudentOption[]);
   }
@@ -195,17 +188,7 @@ export default function ParapemptikaPage() {
     setRecordStudentIds(new Set((data ?? []).map((r: any) => r.student_id)));
   }
 
-  function normalizeParapemtika(data: any[]): ParapemtikoRow[] {
-    return data.map((item) => ({
-      ...item,
-      student: Array.isArray(item.student)
-        ? item.student[0] ?? null
-        : item.student ?? null,
-    })) as ParapemtikoRow[];
-  }
-
   async function fetchParapemtika(
-    tid: string,
     p = page,
     q = query,
     sf = statusFilter,
@@ -214,90 +197,55 @@ export default function ParapemptikaPage() {
   ) {
     setLoading(true);
     setError(null);
-
-    const from = (p - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    let req = supabase
-      .from("parapemtiko")
-      .select(PARAP_SELECT, { count: "exact" })
-      .eq("tenant_id", tid);
-
-    const qq = q.trim();
-    if (qq) {
-      const safe = qq.replace(/,/g, " ");
-      const { data: matchingStudents } = await supabase
-        .from("students")
-        .select("user_id")
-        .eq("tenant_id", tid)
-        .or(`name.ilike.%${safe}%,lastname.ilike.%${safe}%,amka.ilike.%${safe}%`);
-      const studentIds = (matchingStudents ?? []).map((s: any) => s.user_id);
-      let orParts = `title.ilike.%${safe}%,code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`;
-      if (studentIds.length > 0) {
-        orParts += `,student_id.in.(${studentIds.join(",")})`;
-      }
-      req = req.or(orParts);
-    }
-
-    if (sf !== "all") req = req.eq("status", sf);
-    if (af) req = req.eq("student_id", af);
-
-    const today = new Date().toISOString().slice(0, 10);
-    if (edf === "expired") req = req.not("end_date", "is", null).lt("end_date", today);
-    if (edf === "active") req = req.or(`end_date.is.null,end_date.gte.${today}`);
-    if (edf === "none") req = req.is("end_date", null);
-
-    const { data, error, count } = await req
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      setError(error.message);
+    try {
+      const result = await callFunction<{ rows: ParapemtikoRow[]; total: number }>(
+        "parapemptiko-list",
+        { page: p, page_size: PAGE_SIZE, query: q, status_filter: sf, student_id_filter: af, end_date_filter: edf }
+      );
+      setRows(result.rows);
+      setTotal(result.total);
+    } catch (e: any) {
+      setError(e?.message ?? "Σφάλμα φόρτωσης.");
       setRows([]);
       setTotal(0);
-    } else {
-      setRows(normalizeParapemtika(data ?? []));
-      setTotal(count ?? 0);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   useEffect(() => {
     if (!tenantId) return;
     fetchStudents(tenantId);
     fetchRecordStudentIds(tenantId);
-    fetchParapemtika(tenantId, page, query);
+    fetchParapemtika(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, page]);
 
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);
-    fetchParapemtika(tenantId, 1, query);
+    fetchParapemtika(1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, tenantId]);
 
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);
-    fetchParapemtika(tenantId, 1, query, statusFilter, amkaFilter, endDateFilter);
+    fetchParapemtika(1, query, statusFilter, amkaFilter, endDateFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, amkaFilter, endDateFilter]);
 
   async function bulkDelete() {
-    if (!tenantId || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
     setBulkDeleting(true);
     try {
       await callFunction("parapemptiko-bulk-delete", { ids: selectedIds });
-      const deletedCount = selectedIds.length;
+      const newTotal = Math.max(0, total - selectedIds.length);
+      const nextPage = Math.min(page, Math.max(1, Math.ceil(newTotal / PAGE_SIZE)));
       clearSelection();
       setBulkDeleteOpen(false);
-      const newTotal = Math.max(0, total - deletedCount);
-      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      const nextPage = Math.min(page, newTotalPages);
       setPage(nextPage);
-      fetchParapemtika(tenantId, nextPage, query);
+      await fetchParapemtika(nextPage);
     } catch (e: any) {
       setError(e?.message ?? "Σφάλμα διαγραφής.");
     } finally {
@@ -307,18 +255,19 @@ export default function ParapemptikaPage() {
 
   async function exportExcel() {
     if (!tenantId) return;
+    const SELECT =
+      "id,tenant_id,title,student_id,doc_opinion_id,code,code_diagnosis,start_date,end_date,status,notes,created_at,updated_at,student:students(name,lastname,amka)";
 
     const { data, error } = await supabase
       .from("parapemtiko")
-      .select(PARAP_SELECT)
+      .select(SELECT)
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
     if (error || !data) return;
 
-    const allRows = normalizeParapemtika(data ?? []);
-
-    const exportData = allRows.map((r) => {
+    const exportData = data.map((item: any) => {
+      const r = { ...item, student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null };
       const statusLabel = r.status === "completed" ? "Ολοκληρωμένο" : "Εκκρεμεί";
       const obj: Record<string, any> = { Τίτλος: r.title, Κατάσταση: statusLabel };
       if (isColVisible("amka")) obj["ΑΜΚΑ"] = r.student?.amka ?? "";
@@ -335,10 +284,10 @@ export default function ParapemptikaPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Παραπεμπτικά");
     const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([buf], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, `parapemptika_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(
+      new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      `parapemptika_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   }
 
   function openCreate() {
@@ -360,10 +309,7 @@ export default function ParapemptikaPage() {
     setForm({ ...EMPTY_FORM });
   }
 
-  function setField<K extends keyof ParapemtikoForm>(
-    k: K,
-    v: ParapemtikoForm[K]
-  ) {
+  function setField<K extends keyof ParapemtikoForm>(k: K, v: ParapemtikoForm[K]) {
     setForm((prev) => ({ ...prev, [k]: v }));
   }
 
@@ -375,60 +321,22 @@ export default function ParapemptikaPage() {
   }
 
   async function onSave() {
-    if (!tenantId) return;
-
     const v = validate(form);
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
 
     setSaving(true);
     setError(null);
 
     try {
       if (!editing) {
-        const payload = {
-          tenant_id: tenantId,
-          ...formToDb(form),
-          created_at: new Date().toISOString(),
-        };
-
-        const { data: inserted, error } = await supabase
-          .from("parapemtiko")
-          .insert(payload)
-          .select(PARAP_SELECT)
-          .single();
-
-        if (error) throw error;
-
-        setRows((prev) => [normalizeParapemtika([inserted])[0], ...prev]);
-        setTotal((t) => t + 1);
+        await callFunction("parapemptiko-create", formPayload(form));
         setPage(1);
-
         closeModal();
-        fetchParapemtika(tenantId, 1, query);
+        await fetchParapemtika(1);
       } else {
-        const payload = formToDb(form);
-
-        const { data: updated, error } = await supabase
-          .from("parapemtiko")
-          .update(payload)
-          .eq("tenant_id", tenantId)
-          .eq("id", editing.id)
-          .select(PARAP_SELECT)
-          .single();
-
-        if (error) throw error;
-
-        setRows((prev) =>
-          prev.map((x) =>
-            x.id === editing.id ? normalizeParapemtika([updated])[0] : x
-          )
-        );
-
+        await callFunction("parapemptiko-update", { id: editing.id, ...formPayload(form) });
         closeModal();
-        fetchParapemtika(tenantId, page, query);
+        await fetchParapemtika(page);
       }
     } catch (e: any) {
       setError(e?.message ?? "Σφάλμα αποθήκευσης.");
@@ -449,26 +357,16 @@ export default function ParapemptikaPage() {
   }
 
   async function confirmDelete() {
-    if (!tenantId || !deleteRow) return;
+    if (!deleteRow) return;
     setDeleting(true);
     setError(null);
-
     try {
-      const { error } = await supabase
-        .from("parapemtiko")
-        .delete()
-        .eq("tenant_id", tenantId)
-        .eq("id", deleteRow.id);
-
-      if (error) throw error;
-
+      await callFunction("parapemptiko-delete", { id: deleteRow.id });
       const newTotal = Math.max(0, total - 1);
-      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      const nextPage = Math.min(page, newTotalPages);
+      const nextPage = Math.min(page, Math.max(1, Math.ceil(newTotal / PAGE_SIZE)));
       setPage(nextPage);
-
       closeDelete();
-      fetchParapemtika(tenantId, nextPage, query);
+      await fetchParapemtika(nextPage);
     } catch (e: any) {
       setError(e?.message ?? "Σφάλμα διαγραφής.");
     } finally {
@@ -587,29 +485,18 @@ export default function ParapemptikaPage() {
         toggleSelectPage={toggleSelectPage}
       />
 
-      {/* Pagination */}
       <div className="mt-3 flex items-center justify-between text-sm">
         <div className="text-muted">
           Σύνολο: <span className="text-text">{total}</span>
         </div>
-
         <div className="flex items-center gap-2">
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-          >
+          <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
             Prev
           </button>
           <div className="text-muted">
-            Σελίδα <span className="text-text">{page}</span> /{" "}
-            <span className="text-text">{totalPages}</span>
+            Σελίδα <span className="text-text">{page}</span> / <span className="text-text">{totalPages}</span>
           </div>
-          <button
-            className="btn"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
+          <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
             Next
           </button>
         </div>
@@ -624,7 +511,6 @@ export default function ParapemptikaPage() {
         onClose={() => setBulkDeleteOpen(false)}
       />
 
-      {/* Create / Edit Modal */}
       <ParapemptikoModal
         open={modalOpen}
         title={editing ? "Επεξεργασία παραπεμπτικού" : "Προσθήκη παραπεμπτικού"}
@@ -635,20 +521,12 @@ export default function ParapemptikaPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
             <div className="mb-1 text-xs text-muted">Τίτλος *</div>
-            <input
-              className="input"
-              value={form.title}
-              onChange={(e) => setField("title", e.target.value)}
-            />
+            <input className="input" value={form.title} onChange={(e) => setField("title", e.target.value)} />
           </div>
 
           <div className="md:col-span-2">
             <div className="mb-1 text-xs text-muted">Μαθητής *</div>
-            <select
-              className="input"
-              value={form.student_id}
-              onChange={(e) => setField("student_id", e.target.value)}
-            >
+            <select className="input" value={form.student_id} onChange={(e) => setField("student_id", e.target.value)}>
               <option value="">— Επιλογή —</option>
               {students.map((s) => (
                 <option key={s.user_id} value={s.user_id}>
@@ -660,49 +538,27 @@ export default function ParapemptikaPage() {
 
           <div>
             <div className="mb-1 text-xs text-muted">Κωδικός</div>
-            <input
-              className="input"
-              value={form.code}
-              onChange={(e) => setField("code", e.target.value)}
-            />
+            <input className="input" value={form.code} onChange={(e) => setField("code", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Κωδ. Διάγνωσης</div>
-            <input
-              className="input"
-              value={form.code_diagnosis}
-              onChange={(e) => setField("code_diagnosis", e.target.value)}
-            />
+            <input className="input" value={form.code_diagnosis} onChange={(e) => setField("code_diagnosis", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Ημ. Έναρξης *</div>
-            <input
-              className="input"
-              type="date"
-              value={form.start_date}
-              onChange={(e) => setField("start_date", e.target.value)}
-            />
+            <input className="input" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Ημ. Λήξης</div>
-            <input
-              className="input"
-              type="date"
-              value={form.end_date}
-              onChange={(e) => setField("end_date", e.target.value)}
-            />
+            <input className="input" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.target.value)} />
           </div>
 
           <div>
             <div className="mb-1 text-xs text-muted">Κατάσταση</div>
-            <select
-              className="input"
-              value={form.status}
-              onChange={(e) => setField("status", e.target.value)}
-            >
+            <select className="input" value={form.status} onChange={(e) => setField("status", e.target.value)}>
               <option value="pending">Εκκρεμεί</option>
               <option value="completed">Ολοκληρωμένο</option>
             </select>
@@ -710,25 +566,18 @@ export default function ParapemptikaPage() {
 
           <div className="md:col-span-2">
             <div className="mb-1 text-xs text-muted">Σημειώσεις</div>
-            <textarea
-              className="input min-h-24"
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-            />
+            <textarea className="input min-h-24" value={form.notes} onChange={(e) => setField("notes", e.target.value)} />
           </div>
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <button className="btn" onClick={closeModal} disabled={saving}>
-            Άκυρο
-          </button>
+          <button className="btn" onClick={closeModal} disabled={saving}>Άκυρο</button>
           <button className="btn btn-primary" onClick={onSave} disabled={saving}>
             {saving ? "Αποθήκευση..." : "Αποθήκευση"}
           </button>
         </div>
       </ParapemptikoModal>
 
-      {/* Delete confirm */}
       <ParapemptikoConfirmModal
         open={deleteOpen}
         title="Διαγραφή παραπεμπτικού"
