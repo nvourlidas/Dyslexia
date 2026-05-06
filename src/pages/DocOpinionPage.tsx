@@ -211,7 +211,33 @@ export default function DocOpinionPage() {
     const qq = q.trim();
     if (qq) {
       const safe = qq.replace(/,/g, " ");
-      req = req.or(`notes.ilike.%${safe}%`);
+      const { data: matchingStudents } = await supabase
+        .from("students")
+        .select("user_id")
+        .eq("tenant_id", tid)
+        .or(`name.ilike.%${safe}%,lastname.ilike.%${safe}%,amka.ilike.%${safe}%`);
+      const studentIds = (matchingStudents ?? []).map((s: any) => s.user_id);
+
+      const { data: matchingParapemptika } = await supabase
+        .from("parapemtiko")
+        .select("doc_opinion_id")
+        .eq("tenant_id", tid)
+        .not("doc_opinion_id", "is", null)
+        .or(`code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`);
+      const docOpinionIds = [
+        ...new Set(
+          (matchingParapemptika ?? []).map((p: any) => p.doc_opinion_id).filter(Boolean)
+        ),
+      ];
+
+      let orParts = `notes.ilike.%${safe}%`;
+      if (studentIds.length > 0) {
+        orParts += `,student_id.in.(${studentIds.join(",")})`;
+      }
+      if (docOpinionIds.length > 0) {
+        orParts += `,id.in.(${docOpinionIds.join(",")})`;
+      }
+      req = req.or(orParts);
     }
 
     if (sf !== "all") req = req.eq("status", sf);
@@ -487,7 +513,7 @@ export default function DocOpinionPage() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             className="input w-full sm:w-72"
-            placeholder="Αναζήτηση (notes, student id...)"
+            placeholder="Αναζήτηση (όνομα, ΑΜΚΑ, κωδικός, σημειώσεις...)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />

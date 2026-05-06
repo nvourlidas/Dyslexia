@@ -226,9 +226,17 @@ export default function ParapemptikaPage() {
     const qq = q.trim();
     if (qq) {
       const safe = qq.replace(/,/g, " ");
-      req = req.or(
-        `title.ilike.%${safe}%,code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`
-      );
+      const { data: matchingStudents } = await supabase
+        .from("students")
+        .select("user_id")
+        .eq("tenant_id", tid)
+        .or(`name.ilike.%${safe}%,lastname.ilike.%${safe}%,amka.ilike.%${safe}%`);
+      const studentIds = (matchingStudents ?? []).map((s: any) => s.user_id);
+      let orParts = `title.ilike.%${safe}%,code.ilike.%${safe}%,code_diagnosis.ilike.%${safe}%`;
+      if (studentIds.length > 0) {
+        orParts += `,student_id.in.(${studentIds.join(",")})`;
+      }
+      req = req.or(orParts);
     }
 
     if (sf !== "all") req = req.eq("status", sf);
@@ -479,7 +487,7 @@ export default function ParapemptikaPage() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             className="input w-full sm:w-72"
-            placeholder="Αναζήτηση (τίτλος, κωδικοί, status...)"
+            placeholder="Αναζήτηση (όνομα, ΑΜΚΑ, κωδικός, διάγνωση...)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
