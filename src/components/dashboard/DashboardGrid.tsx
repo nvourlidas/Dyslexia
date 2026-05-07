@@ -7,6 +7,7 @@ export const WIDGET_LABELS: Record<WidgetId, string> = {
   kpi_teachers: "Παραπεμπτικά προς λήξη",
   kpi_sessions: "Συνεδρίες Σήμερα",
   kpi_expiring: "Γνωματεύσεις προς αποστολή",
+  kpi_no_code: "Παραπεμπτικό χωρίς κωδικό γονέα",
   notepad: "Σημειωματάριο",
   pending: "Εκκρεμότητες",
 }

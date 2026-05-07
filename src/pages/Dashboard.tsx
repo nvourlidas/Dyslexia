@@ -7,7 +7,10 @@ import { useAuth } from "@/auth/AuthProvider";
 import NotepadSection from "@/components/dashboard/NotepadSection"
 import DoctorListModal from "@/components/dashboard/DoctorListModal"
 import DocOpinionSendModal from "@/components/dashboard/DocOpinionSendModal"
-import ParapemtikaExpiringModal from "@/components/dashboard/ParapemtikaExpiringModal";
+import ParapemtikaExpiringModal from "@/components/dashboard/ParapemtikaExpiringModal"
+import TodaySessionsModal from "@/components/dashboard/TodaySessionsModal"
+import ParapemtikaNoCodeModal from "@/components/dashboard/ParapemtikaNoCodeModal"
+import ParapemtikaExecutionModal from "@/components/dashboard/ParapemtikaExecutionModal";
 import DashboardGrid from "@/components/dashboard/DashboardGrid";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import type { WidgetId } from "@/hooks/useDashboardLayout";
@@ -127,6 +130,16 @@ export default function Dashboard() {
   const [showParapemtikaModal, setShowParapemtikaModal] = useState(false)
   const [parapemtikaCount, setParapemtikaCount] = useState(0)
 
+  // Today sessions modal state
+  const [showTodayModal, setShowTodayModal] = useState(false)
+
+  // No-code parapemtika modal state
+  const [showNoCodeModal, setShowNoCodeModal] = useState(false)
+  const [noCodeCount, setNoCodeCount] = useState(0)
+
+  // Execution parapemtika modal state
+  const [showExecutionModal, setShowExecutionModal] = useState(false)
+
   // Modal state
   const [showExpiringModal, setShowExpiringModal] = useState(false);
   const [expiringDetails, setExpiringDetails] = useState<ExpiringParapemtikoDetails[]>([]);
@@ -198,16 +211,16 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
           .from("parapemtiko")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
-          .eq("status", "active")
+          .eq("status", "pending")
           .not("end_date", "is", null)
-          .gte("end_date", todayStart.slice(0, 10)) // date column safety (YYYY-MM-DD)
+          .gte("end_date", todayStart.slice(0, 10))
           .lte("end_date", in30Days.slice(0, 10));
 
         const expiringListReq = supabase
           .from("parapemtiko")
           .select("id,title,end_date,status,doc_opinion_id")
           .eq("tenant_id", tenantId)
-          .eq("status", "active")
+          .eq("status", "pending")
           .not("end_date", "is", null)
           .gte("end_date", todayStart.slice(0, 10))
           .lte("end_date", in30Days.slice(0, 10))
@@ -219,7 +232,7 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
           .from("parapemtiko")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
-          .eq("status", "active")
+          .neq("status", "completed")
           .or("code.is.null,code.eq.");
 
         // 6) Parapemtika pending count (all pending, no date filter)
@@ -301,6 +314,7 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
         });
 
         setExpiringRows((expListRes.data ?? []) as ExpiringParapemtikoRow[]);
+        if (!cancelled) setNoCodeCount(missingCodeRes.count ?? 0);
 
         if (!parapemtikaCountRes.error) {
           if (!cancelled) setParapemtikaCount(parapemtikaCountRes.count ?? 0)
@@ -348,7 +362,7 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
           .from("parapemtiko")
           .select("id,title,code,start_date,end_date,status,doc_opinion_id")
           .eq("tenant_id", tenantId)
-          .eq("status", "active")
+          .eq("status", "pending")
           .not("end_date", "is", null)
           .gte("end_date", todayStart.slice(0, 10))
           .lte("end_date", in30Days.slice(0, 10))
@@ -467,8 +481,13 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
         title: "Παραπεμπτικά χωρίς κωδικό",
         value: kpis.missingCodeParapemtika,
       },
+      {
+        key: "execution",
+        title: "Παραπεμπτικά προς εκτέλεση",
+        value: parapemtikaCount,
+      },
     ];
-  }, [kpis.expiringParapemtika30, kpis.missingCodeParapemtika]);
+  }, [kpis.expiringParapemtika30, kpis.missingCodeParapemtika, parapemtikaCount]);
 
   function renderWidget(widgetId: WidgetId | null) {
     if (!widgetId) return null;
@@ -504,7 +523,19 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
       );
     }
     if (widgetId === "kpi_sessions") {
-      return <KpiCard title="Συνεδρίες Σήμερα" value={kpis.todaySessions} loading={loading} />;
+      return (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowTodayModal(true)}
+          onKeyDown={(e) => e.key === "Enter" && setShowTodayModal(true)}
+          className="rounded-2xl border border-border bg-panel px-4 py-3 cursor-pointer hover:border-primary/40 transition-colors"
+        >
+          <div className="text-xs text-muted">Συνεδρίες Σήμερα</div>
+          <div className="mt-1 text-xl font-semibold">{loading ? "…" : kpis.todaySessions}</div>
+          <div className="mt-0.5 text-xs text-muted">πάτα για πρόγραμμα & παρουσίες</div>
+        </div>
+      );
     }
     if (widgetId === "kpi_expiring") {
       return (
@@ -522,6 +553,22 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
       );
     }
 
+    if (widgetId === "kpi_no_code") {
+      return (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowNoCodeModal(true)}
+          onKeyDown={(e) => e.key === "Enter" && setShowNoCodeModal(true)}
+          className="rounded-2xl border border-border bg-panel px-4 py-3 cursor-pointer hover:border-primary/40 transition-colors"
+        >
+          <div className="text-xs text-muted">Παραπεμπτικό χωρίς κωδικό γονέα</div>
+          <div className="mt-1 text-xl font-semibold">{loading ? "…" : noCodeCount}</div>
+          <div className="mt-0.5 text-xs text-muted">χωρίς κωδικό γονέα</div>
+        </div>
+      );
+    }
+
     if (widgetId === "notepad") {
       return tenantId ? <NotepadSection tenantId={tenantId} /> : null;
     }
@@ -532,18 +579,19 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
           <div className="mb-3 text-base font-semibold">Εκκρεμότητες</div>
           <div className="space-y-2">
             {pendingItems.map((it) => {
-              const clickable =
-                it.key === "expiring30" && (it.value ?? 0) > 0 && !loading;
+              function handleClick() {
+                if (it.key === "expiring30") setShowExpiringModal(true)
+                else if (it.key === "missingCode") setShowNoCodeModal(true)
+                else if (it.key === "execution") setShowExecutionModal(true)
+              }
               return (
                 <div
                   key={it.key}
-                  onClick={() => { if (!clickable) return; setShowExpiringModal(true); }}
-                  className={[
-                    "flex items-center justify-between rounded-xl border border-border bg-bg px-3 py-2",
-                    clickable ? "cursor-pointer hover:bg-bg/60 transition" : "",
-                  ].join(" ")}
-                  role={clickable ? "button" : undefined}
-                  tabIndex={clickable ? 0 : -1}
+                  onClick={handleClick}
+                  className="flex items-center justify-between rounded-xl border border-border bg-bg px-3 py-2 cursor-pointer hover:bg-bg/60 transition"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && handleClick()}
                 >
                   <div className="text-sm">{it.title}</div>
                   <div className="text-sm font-semibold">{loading ? "…" : it.value}</div>
@@ -599,6 +647,35 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
         editOps={editOps}
         renderWidget={renderWidget}
       />
+
+      {/* Modal: Execution parapemtika */}
+      {tenantId && (
+        <ParapemtikaExecutionModal
+          open={showExecutionModal}
+          tenantId={tenantId}
+          onClose={() => setShowExecutionModal(false)}
+          onCountChange={setParapemtikaCount}
+        />
+      )}
+
+      {/* Modal: No-code parapemtika */}
+      {tenantId && (
+        <ParapemtikaNoCodeModal
+          open={showNoCodeModal}
+          tenantId={tenantId}
+          onClose={() => setShowNoCodeModal(false)}
+          onCountChange={setNoCodeCount}
+        />
+      )}
+
+      {/* Modal: Today sessions */}
+      {tenantId && (
+        <TodaySessionsModal
+          open={showTodayModal}
+          tenantId={tenantId}
+          onClose={() => setShowTodayModal(false)}
+        />
+      )}
 
       {/* Modal: Parapemtika expiring */}
       {tenantId && (
@@ -803,9 +880,7 @@ const [detailErr, setDetailErr] = useState<string | null>(null);
               )}
             </div>
 
-            <div className="mt-3 text-xs text-muted-foreground">
-              * Στο επόμενο βήμα μπορούμε να κάνουμε click σε γραμμή και να ανοίγει “Detail modal” ανά παραπεμπτικό.
-            </div>
+
           </div>
         </div>
       )}

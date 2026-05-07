@@ -5,6 +5,7 @@ export type WidgetId =
   | "kpi_teachers"
   | "kpi_sessions"
   | "kpi_expiring"
+  | "kpi_no_code"
   | "notepad"
   | "pending"
 
