@@ -23,17 +23,6 @@ type Kpis = {
   missingCodeParapemtika: number;
 };
 
-async function getMyTenantId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("tenant_id")
-    .eq("id", userId)
-    .single();
-
-  if (error || !data?.tenant_id) throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
-  return data.tenant_id as string;
-}
-
 function startOfTodayIso() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -51,7 +40,7 @@ function plusDaysIso(days: number) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -116,21 +105,8 @@ export default function Dashboard() {
   const [showExpiringModal, setShowExpiringModal] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      if (!user?.id) return;
-      try {
-        const tid = await getMyTenantId(user.id);
-        if (!cancelled) setTenantId(tid);
-      } catch (e: any) {
-        if (!cancelled) setErr(e?.message ?? "Σφάλμα tenant.");
-      }
-    }
-    boot();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
+    setTenantId(profile?.tenant_id ?? null)
+  }, [profile?.tenant_id]);
 
   useEffect(() => {
     let cancelled = false;

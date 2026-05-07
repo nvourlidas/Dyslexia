@@ -83,19 +83,8 @@ function toForm(r?: ParapemtikoRow | null): ParapemtikoForm {
   };
 }
 
-async function getMyTenantId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("tenant_id")
-    .eq("id", userId)
-    .single();
-  if (error || !data?.tenant_id)
-    throw new Error("Δεν βρέθηκε tenant για τον χρήστη.");
-  return data.tenant_id as string;
-}
-
 export default function ParapemptikaPage() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,22 +140,9 @@ export default function ParapemptikaPage() {
       tenantId,
     });
 
-  // Boot: load tenant id
   useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      if (!user?.id) return;
-      setError(null);
-      try {
-        const t = await getMyTenantId(user.id);
-        if (!cancelled) setTenantId(t);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Σφάλμα tenant.");
-      }
-    }
-    boot();
-    return () => { cancelled = true; };
-  }, [user?.id]);
+    setTenantId(profile?.tenant_id ?? null)
+  }, [profile?.tenant_id]);
 
   async function fetchStudents(tid: string) {
     const { data, error } = await supabase
@@ -213,21 +189,30 @@ export default function ParapemptikaPage() {
     }
   }
 
+  // Students + record IDs: μόνο όταν αλλάζει το tenant (όχι σε κάθε αλλαγή σελίδας)
   useEffect(() => {
     if (!tenantId) return;
     fetchStudents(tenantId);
     fetchRecordStudentIds(tenantId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
+
+  // Δεδομένα: initial load + αλλαγή σελίδας
+  useEffect(() => {
+    if (!tenantId) return;
     fetchParapemtika(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, page]);
 
+  // Αναζήτηση: μόνο όταν αλλάζει το query (tenantId εκτός deps — καλύπτεται από πάνω)
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);
     fetchParapemtika(1, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tenantId]);
+  }, [query]);
 
+  // Φίλτρα
   useEffect(() => {
     if (!tenantId) return;
     setPage(1);

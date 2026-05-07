@@ -12,18 +12,6 @@ export async function callFunction<T>(
   functionName: string,
   payload: any
 ): Promise<T> {
-  const { data: { session }, error: sErr } = await supabase.auth.getSession();
-  if (sErr) {
-    const err = new Error(sErr.message);
-    (err as any).code = "SESSION_READ_FAILED";
-    throw err;
-  }
-  if (!session?.access_token) {
-    const err = new Error("No active session / access_token");
-    (err as any).code = "NO_SESSION";
-    throw err;
-  }
-
   const { data, error } = await supabase.functions.invoke<ApiResponse<T>>(
     functionName,
     {
