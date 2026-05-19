@@ -11,6 +11,7 @@ import ParapemtikaExpiringModal from "@/components/dashboard/ParapemtikaExpiring
 import TodaySessionsModal from "@/components/dashboard/TodaySessionsModal"
 import ParapemtikaNoCodeModal from "@/components/dashboard/ParapemtikaNoCodeModal"
 import ParapemtikaExecutionModal from "@/components/dashboard/ParapemtikaExecutionModal";
+import ExecutionReferralsWidget from "@/components/dashboard/ExecutionReferralsWidget";
 import ParapemtikaExpiring30Modal from "@/components/dashboard/ParapemtikaExpiring30Modal";
 import DashboardGrid from "@/components/dashboard/DashboardGrid";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
@@ -158,7 +159,7 @@ export default function Dashboard() {
           .from("parapemtiko")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
-          .neq("status", "completed")
+          .eq("status", "pending")
           .or("code.is.null,code.eq.");
 
         // 6) Parapemtika pending count (all pending, no date filter)
@@ -363,6 +364,12 @@ export default function Dashboard() {
           <div className="mt-0.5 text-xs text-muted">χωρίς κωδικό γονέα</div>
         </div>
       );
+    }
+
+    if (widgetId === "execution_referrals") {
+      return tenantId ? (
+        <ExecutionReferralsWidget tenantId={tenantId} onCountChange={setParapemtikaCount} />
+      ) : null;
     }
 
     if (widgetId === "notepad") {

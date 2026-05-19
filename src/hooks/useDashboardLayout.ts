@@ -8,6 +8,7 @@ export type WidgetId =
   | "kpi_no_code"
   | "notepad"
   | "pending"
+  | "execution_referrals"
 
 export interface LayoutCell {
   id: string
@@ -41,6 +42,12 @@ const DEFAULT_LAYOUT: DashboardLayout = {
       cells: [
         { id: "cell-notepad", widgetId: "notepad" },
         { id: "cell-pending", widgetId: "pending" },
+      ],
+    },
+    {
+      id: "row-execution",
+      cells: [
+        { id: "cell-execution", widgetId: "execution_referrals" },
       ],
     },
   ],

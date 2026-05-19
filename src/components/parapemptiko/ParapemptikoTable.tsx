@@ -1,4 +1,5 @@
 // src/components/parapemptika/ParapemptikaTable.tsx
+import { fmtDate } from "@/lib/dateUtils"
 
 export type ParapemtikoRow = {
   id: string;
@@ -120,19 +121,21 @@ export default function ParapemptikοTable({
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       r.status === "completed"
                         ? "bg-green-500/15 text-green-400"
+                        : r.status === "inactive"
+                        ? "bg-muted/15 text-muted"
                         : "bg-yellow-500/15 text-yellow-400"
                     }`}
                   >
-                    {r.status === "completed" ? "Ολοκληρωμένο" : "Εκκρεμεί"}
+                    {r.status === "completed" ? "Ολοκληρωμένο" : r.status === "inactive" ? "Απενεργοποιημένο" : "Εκκρεμεί"}
                   </span>
                 </td>
                 {show("amka") && <td className="px-3 py-3 text-muted">{r.student?.amka ?? "-"}</td>}
                 {show("code") && <td className="px-3 py-3">{r.code ?? "-"}</td>}
                 {show("code_diagnosis") && <td className="px-3 py-3">{r.code_diagnosis ?? "-"}</td>}
-                {show("start_date") && <td className="px-3 py-3">{r.start_date}</td>}
-                {show("end_date") && <td className="px-3 py-3">{r.end_date ?? "-"}</td>}
+                {show("start_date") && <td className="px-3 py-3">{fmtDate(r.start_date)}</td>}
+                {show("end_date") && <td className="px-3 py-3">{fmtDate(r.end_date)}</td>}
                 {show("notes") && <td className="px-3 py-3">{r.notes ? r.notes.slice(0, 60) : "-"}</td>}
-                {show("created_at") && <td className="px-3 py-3">{r.created_at?.slice(0, 10) ?? "-"}</td>}
+                {show("created_at") && <td className="px-3 py-3">{fmtDate(r.created_at)}</td>}
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
                     <button className="btn" onClick={() => onEdit(r)}>

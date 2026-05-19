@@ -8,6 +8,7 @@ import {
   Settings,
   Palette,
   PencilRuler,
+  ClipboardList,
 } from 'lucide-react'
 
 export type GroupChild =
@@ -33,6 +34,7 @@ export const NAV: NavEntry[] = [
   { type: 'item', label: 'Καθηγητές', to: '/teachers', icon: ContactRound },
   { type: 'item', label: 'Παραπεμπτικά', to: '/parapeptika', icon: ContactRound },
   { type: 'item', label: 'Γνωματεύσεις', to: '/doc-opinion', icon: ContactRound },
+  { type: 'item', label: 'Εκκρεμότητες', to: '/pending', icon: ClipboardList },
 
   { type: 'section', title: 'Διαχείριση' },
   {

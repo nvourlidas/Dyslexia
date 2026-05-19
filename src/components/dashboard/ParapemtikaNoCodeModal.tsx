@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { fmtDate } from "@/lib/dateUtils"
 import { X, Loader2, MessageSquare, Check, Trash2, CheckSquare, Square, Hash } from "lucide-react"
 
 const GREEK_MONTHS = [
@@ -60,7 +61,7 @@ export default function ParapemtikaNoCodeModal({ open, tenantId, onClose, onCoun
       .from("parapemtiko")
       .select("id, title, code, code_diagnosis, end_date, notes, student:students(name, lastname, amka)")
       .eq("tenant_id", tenantId)
-      .neq("status", "completed")
+      .eq("status", "pending")
       .or("code.is.null,code.eq.")
       .order("end_date", { ascending: true, nullsFirst: false })
 
@@ -259,7 +260,7 @@ export default function ParapemtikaNoCodeModal({ open, tenantId, onClose, onCoun
                                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
                                   {item.amka && <span>ΑΜΚΑ: <span className="font-mono">{item.amka}</span></span>}
                                   {item.code_diagnosis && <span>Κωδ. Διάγν.: <span className="font-mono">{item.code_diagnosis}</span></span>}
-                                  {item.end_date && <span>Λήξη: {item.end_date}</span>}
+                                  {item.end_date && <span>Λήξη: {fmtDate(item.end_date)}</span>}
                                 </div>
                                 {!isExpanded && item.notes && (
                                   <div className="mt-1 rounded-lg bg-panel/60 px-2.5 py-1.5 text-xs text-muted">

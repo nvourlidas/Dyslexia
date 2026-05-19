@@ -6,8 +6,10 @@ import { callFunction } from "@/lib/api";
 import ToastHost from "@/components/ui/ToastHost";
 import SessionDayModal from "@/components/session/SessionDayModal";
 import ClassesModal, { type ClassRow } from "@/components/session/ClassesModal";
+import CopyWeekModal from "@/components/session/CopyWeekModal";
 import { useToast } from "@/hooks/useToast";
 import { PALETTE, toDateKey, toISO, groupByTeacher } from "@/lib/session.utils";
+import { Copy } from "lucide-react";
 import type {
   ClassSession, TeacherOption, StudentOption, TeacherDayGroup, AttendanceStatus,
 } from "@/types/session";
@@ -57,6 +59,7 @@ export default function SessionsPage() {
 
   const [modalDate, setModalDate] = useState<string | null>(null);
   const [classesOpen, setClassesOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   // ── Init ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -271,6 +274,14 @@ export default function SessionsPage() {
             Τάξεις {classes.length > 0 && <span className="ml-1 text-xs text-muted">({classes.length})</span>}
           </button>
 
+          <button
+            className="h-9 px-3 rounded-md text-sm border border-border/15 hover:bg-panel2 cursor-pointer inline-flex items-center gap-2"
+            onClick={() => setCopyOpen(true)}
+          >
+            <Copy className="h-4 w-4" />
+            Αντιγραφή εβδομάδας
+          </button>
+
           <div className="w-px h-5 bg-border/20" />
 
           <button
@@ -363,6 +374,16 @@ export default function SessionsPage() {
         onClose={() => setClassesOpen(false)}
         onRefresh={loadClasses}
       />
+
+      {/* Copy Week Modal */}
+      {tenantId && (
+        <CopyWeekModal
+          open={copyOpen}
+          tenantId={tenantId}
+          onClose={() => setCopyOpen(false)}
+          onCopied={loadSessions}
+        />
+      )}
     </div>
   );
 }

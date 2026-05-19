@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { fmtDate } from "@/lib/dateUtils"
 import { X, Loader2, Trash2, CheckSquare, Square, SlidersHorizontal, MessageSquare, Check } from "lucide-react"
 
 const GREEK_MONTHS = [
@@ -310,7 +311,7 @@ export default function ParapemtikaExecutionModal({ open, tenantId, onClose, onC
                                     <span>Κωδ. Διάγν.: <span className="font-mono">{item.code_diagnosis}</span></span>
                                   )}
                                   {visibleCols.has("end_date") && item.end_date && (
-                                    <span>Λήξη: {item.end_date}</span>
+                                    <span>Λήξη: {fmtDate(item.end_date)}</span>
                                   )}
                                 </div>
                                 {/* Notes preview */}

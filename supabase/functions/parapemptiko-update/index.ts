@@ -16,7 +16,10 @@ postHandler(async (payload, tenantId, _, req) => {
   if (code_diagnosis !== undefined) updateData.code_diagnosis = code_diagnosis ? String(code_diagnosis).trim() : null;
   if (start_date !== undefined) updateData.start_date = start_date;
   if (end_date !== undefined) updateData.end_date = end_date || null;
-  if (status !== undefined) updateData.status = status === "completed" ? "completed" : "pending";
+  if (status !== undefined) {
+    const allowed = ["pending", "completed", "inactive"];
+    updateData.status = allowed.includes(status) ? status : "pending";
+  }
   if (notes !== undefined) updateData.notes = notes ? String(notes).trim() : null;
 
   const { error } = await admin

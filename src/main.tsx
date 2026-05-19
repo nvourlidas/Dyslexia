@@ -21,6 +21,7 @@ import SessionsPage from '@/pages/SessionsPage'
 import AttendancePage from '@/pages/AttendancePage'
 import ParapemptikaPage from '@/pages/ParapemptikaPage'
 import DocOpinionPage from '@/pages/DocOpinionPage'
+import PendingPage from '@/pages/PendingPage'
 
 applyTheme(getInitialTheme())
 applyAppearance(loadAppearance())
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { path: 'sessions', element: <SessionsPage /> },
       { path: 'attendance', element: <AttendancePage /> },
       { path: 'themesettings', element: <ThemeSettingsPage /> },
+      { path: 'pending', element: <PendingPage /> },
     ],
   },
 ])

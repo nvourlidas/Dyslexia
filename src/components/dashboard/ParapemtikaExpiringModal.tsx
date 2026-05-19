@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { fmtDate } from "@/lib/dateUtils"
 import { X, Loader2, Trash2, CheckSquare, Square, SlidersHorizontal } from "lucide-react"
 
 type ColKey = "amka" | "code_diagnosis" | "start_date" | "end_date"
@@ -293,8 +294,8 @@ export default function ParapemtikaExpiringModal({ open, tenantId, onClose, onCo
                               <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
                                 {visibleCols.has("amka") && item.amka && <span>ΑΜΚΑ: <span className="font-mono">{item.amka}</span></span>}
                                 {visibleCols.has("code_diagnosis") && item.code_diagnosis && <span>Κωδ. Διάγν.: <span className="font-mono">{item.code_diagnosis}</span></span>}
-                                {visibleCols.has("start_date") && item.start_date && <span>Έναρξη: {item.start_date}</span>}
-                                {visibleCols.has("end_date") && item.end_date && <span>Λήξη: {item.end_date}</span>}
+                                {visibleCols.has("start_date") && item.start_date && <span>Έναρξη: {fmtDate(item.start_date)}</span>}
+                                {visibleCols.has("end_date") && item.end_date && <span>Λήξη: {fmtDate(item.end_date)}</span>}
                               </div>
                             </div>
                             <button

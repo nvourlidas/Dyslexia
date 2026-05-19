@@ -4,19 +4,16 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/auth/AuthProvider";
 import { useToast } from "@/hooks/useToast";
 import ToastHost from "@/components/ui/ToastHost";
-import { Loader2, ArrowUpDown } from "lucide-react";
+import { Loader2, ArrowUpDown, Download } from "lucide-react";
 import type { AttendanceStatus } from "@/types/session";
-
-const MONTHS = [
-  "Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος",
-  "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος",
-];
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 const SESSION_SELECT = `
   id, teacher_id, starts_at, ends_at, status, notes,
   teacher:teacher(name, last_name),
   class_session_students(session_id, student_id, status, marked_at, notes,
-    student:students(name, lastname)
+    student:students(name, lastname, amka)
   )
 `.trim();
 
@@ -25,6 +22,7 @@ type AttendanceRow = {
   student_id: string;
   student_name: string;
   student_lastname: string;
+  amka: string | null;
   teacher_name: string;
   starts_at: string;
   ends_at: string;
@@ -39,7 +37,8 @@ function formatTime(iso: string) {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("el-GR");
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 function Th({ children }: { children: React.ReactNode }) {
@@ -60,9 +59,11 @@ export default function AttendancePage() {
   const { toasts, pushToast, dismissToast } = useToast();
 
   const today = new Date();
-  const [filterYear, setFilterYear] = useState(today.getFullYear());
-  const [filterMonth, setFilterMonth] = useState(today.getMonth() + 1); // 1-indexed
-  const [filterDay, setFilterDay] = useState<string>(""); // "" = all days
+  const todayStr = today.toISOString().slice(0, 10);
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+
+  const [filterFrom, setFilterFrom] = useState(firstOfMonth);
+  const [filterTo, setFilterTo] = useState(todayStr);
   const [sortAsc, setSortAsc] = useState(true);
   const [q, setQ] = useState("");
 
@@ -75,27 +76,25 @@ export default function AttendancePage() {
   useEffect(() => {
     if (profileLoading || !tenantId) return;
     load();
-  }, [profileLoading, tenantId, filterYear, filterMonth]);
+  }, [profileLoading, tenantId, filterFrom, filterTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setPage(1);
-  }, [filterYear, filterMonth, filterDay, q, pageSize, sortAsc]);
+  }, [filterFrom, filterTo, q, pageSize, sortAsc]);
 
   async function load() {
     if (!tenantId) return;
     setLoading(true);
 
-    // filterMonth is 1-indexed; new Date(year, month-1, 1) = first day of month
-    const monthStart = new Date(filterYear, filterMonth - 1, 1).toISOString();
-    // new Date(year, month, 0) = last day of the month (day 0 of next month = last day of current)
-    const monthEnd = new Date(filterYear, filterMonth, 0, 23, 59, 59).toISOString();
+    const fromStart = new Date(filterFrom + "T00:00:00").toISOString();
+    const toEnd = new Date(filterTo + "T23:59:59").toISOString();
 
     const { data, error } = await supabase
       .from("class_sessions")
       .select(SESSION_SELECT)
       .eq("tenant_id", tenantId)
-      .gte("starts_at", monthStart)
-      .lte("starts_at", monthEnd)
+      .gte("starts_at", fromStart)
+      .lte("starts_at", toEnd)
       .order("starts_at");
 
     if (error) {
@@ -119,6 +118,7 @@ export default function AttendancePage() {
         student_id: ss.student_id,
         student_name: ss.student?.name ?? "",
         student_lastname: ss.student?.lastname ?? "",
+        amka: ss.student?.amka ?? null,
         teacher_name: session.teacher
           ? `${session.teacher.name} ${session.teacher.last_name}`
           : "—",
@@ -138,17 +138,13 @@ export default function AttendancePage() {
   const filtered = useMemo(() => {
     let result = rows;
 
-    if (filterDay) {
-      const day = parseInt(filterDay, 10);
-      result = result.filter((r) => new Date(r.starts_at).getDate() === day);
-    }
-
     if (q) {
       const needle = q.toLowerCase();
       result = result.filter(
         (r) =>
           `${r.student_lastname} ${r.student_name}`.toLowerCase().includes(needle) ||
-          r.teacher_name.toLowerCase().includes(needle)
+          r.teacher_name.toLowerCase().includes(needle) ||
+          (r.amka ?? "").includes(needle)
       );
     }
 
@@ -156,7 +152,7 @@ export default function AttendancePage() {
       const diff = new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
       return sortAsc ? diff : -diff;
     });
-  }, [rows, filterDay, q, sortAsc]);
+  }, [rows, q, sortAsc]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(() => {
@@ -167,15 +163,28 @@ export default function AttendancePage() {
   const startIdx = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
   const endIdx = Math.min(filtered.length, page * pageSize);
 
-  const yearOptions = useMemo(() => {
-    const cur = today.getFullYear();
-    return [cur - 2, cur - 1, cur, cur + 1];
-  }, []);
-
-  const daysInMonth = new Date(filterYear, filterMonth, 0).getDate();
-
   const presentCount = filtered.filter((r) => r.status === "present").length;
   const absentCount = filtered.filter((r) => r.status === "absent").length;
+
+  function exportExcel() {
+    const data = filtered.map((r) => ({
+      "Ημερομηνία": formatDate(r.starts_at),
+      "Ώρα": `${formatTime(r.starts_at)} – ${formatTime(r.ends_at)}`,
+      "Μαθητής": `${r.student_lastname} ${r.student_name}`.trim(),
+      "ΑΜΚΑ": r.amka ?? "",
+      "Καθηγητής": r.teacher_name,
+      "Παρουσία": r.status === "present" ? "Παρών" : "Απών",
+      "Σημειώσεις": r.attendance_notes ?? r.session_notes ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Παρουσίες");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    saveAs(
+      new Blob([buf], { type: "application/octet-stream" }),
+      `parousies_${filterFrom}_${filterTo}.xlsx`
+    );
+  }
 
   return (
     <div className="min-h-full w-full p-3 sm:p-4 md:p-6">
@@ -185,41 +194,30 @@ export default function AttendancePage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           className="h-9 w-full rounded-md border border-border/10 bg-panel2 px-3 text-sm placeholder:text-muted sm:w-64"
-          placeholder="Αναζήτηση μαθητή / καθηγητή…"
+          placeholder="Αναζήτηση μαθητή / καθηγητή / ΑΜΚΑ…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
 
-        <select
-          className="h-9 rounded-md border border-border/10 bg-panel2 px-2 text-sm"
-          value={filterYear}
-          onChange={(e) => { setFilterYear(Number(e.target.value)); setFilterDay(""); }}
-        >
-          {yearOptions.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted whitespace-nowrap">Από</label>
+          <input
+            type="date"
+            className="h-9 rounded-md border border-border/10 bg-panel2 px-2 text-sm"
+            value={filterFrom}
+            onChange={(e) => setFilterFrom(e.target.value)}
+          />
+        </div>
 
-        <select
-          className="h-9 rounded-md border border-border/10 bg-panel2 px-2 text-sm"
-          value={filterMonth}
-          onChange={(e) => { setFilterMonth(Number(e.target.value)); setFilterDay(""); }}
-        >
-          {MONTHS.map((m, i) => (
-            <option key={i + 1} value={i + 1}>{m}</option>
-          ))}
-        </select>
-
-        <select
-          className="h-9 rounded-md border border-border/10 bg-panel2 px-2 text-sm"
-          value={filterDay}
-          onChange={(e) => setFilterDay(e.target.value)}
-        >
-          <option value="">Όλες οι μέρες</option>
-          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted whitespace-nowrap">Έως</label>
+          <input
+            type="date"
+            className="h-9 rounded-md border border-border/10 bg-panel2 px-2 text-sm"
+            value={filterTo}
+            onChange={(e) => setFilterTo(e.target.value)}
+          />
+        </div>
 
         <button
           className="h-9 inline-flex items-center gap-2 rounded-md border border-border/10 bg-panel2 px-3 text-sm hover:bg-secondary/20 cursor-pointer"
@@ -229,6 +227,17 @@ export default function AttendancePage() {
           <ArrowUpDown className="h-4 w-4" />
           {sortAsc ? "Παλαιότερο πρώτα" : "Νεότερο πρώτα"}
         </button>
+
+        {filtered.length > 0 && (
+          <button
+            className="ml-auto h-9 inline-flex items-center gap-2 rounded-md border border-border/10 bg-panel2 px-3 text-sm hover:bg-secondary/20 cursor-pointer"
+            onClick={exportExcel}
+            title="Εξαγωγή σε Excel"
+          >
+            <Download className="h-4 w-4" />
+            Export Excel
+          </button>
+        )}
       </div>
 
       {/* Summary badges */}
@@ -253,6 +262,7 @@ export default function AttendancePage() {
               <Th>Ημερομηνία</Th>
               <Th>Ώρα</Th>
               <Th>Μαθητής</Th>
+              <Th>ΑΜΚΑ</Th>
               <Th>Καθηγητής</Th>
               <Th>Παρουσία</Th>
               <Th>Σημειώσεις</Th>
@@ -261,7 +271,7 @@ export default function AttendancePage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="py-12 text-center">
+                <td colSpan={7} className="py-12 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted" />
                 </td>
               </tr>
@@ -269,7 +279,7 @@ export default function AttendancePage() {
 
             {!loading && paginated.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-muted">
+                <td colSpan={7} className="py-12 text-center text-muted">
                   Δεν βρέθηκαν παρουσίες για τα επιλεγμένα φίλτρα.
                 </td>
               </tr>
@@ -290,6 +300,7 @@ export default function AttendancePage() {
                   <Td className="font-medium">
                     {row.student_lastname} {row.student_name}
                   </Td>
+                  <Td className="font-mono text-xs text-muted">{row.amka ?? "—"}</Td>
                   <Td className="text-muted">{row.teacher_name}</Td>
                   <Td>
                     <span

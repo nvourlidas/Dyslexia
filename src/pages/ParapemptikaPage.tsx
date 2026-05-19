@@ -97,7 +97,7 @@ export default function ParapemptikaPage() {
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [recordStudentIds, setRecordStudentIds] = useState<Set<string>>(new Set());
 
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed" | "inactive">("all");
   const [amkaFilter, setAmkaFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState<"all" | "expired" | "active" | "none">("all");
 
@@ -253,7 +253,7 @@ export default function ParapemptikaPage() {
 
     const exportData = data.map((item: any) => {
       const r = { ...item, student: Array.isArray(item.student) ? item.student[0] ?? null : item.student ?? null };
-      const statusLabel = r.status === "completed" ? "Ολοκληρωμένο" : "Εκκρεμεί";
+      const statusLabel = r.status === "completed" ? "Ολοκληρωμένο" : r.status === "inactive" ? "Απενεργοποιημένο" : "Εκκρεμεί";
       const obj: Record<string, any> = { Τίτλος: r.title, Κατάσταση: statusLabel };
       if (isColVisible("amka")) obj["ΑΜΚΑ"] = r.student?.amka ?? "";
       if (isColVisible("code")) obj["Κωδικός"] = r.code ?? "";
@@ -406,6 +406,7 @@ export default function ParapemptikaPage() {
           <option value="all">Κατάσταση: Όλες</option>
           <option value="pending">Εκκρεμεί</option>
           <option value="completed">Ολοκληρωμένο</option>
+          <option value="inactive">Απενεργοποιημένο</option>
         </select>
 
         <select
@@ -546,6 +547,7 @@ export default function ParapemptikaPage() {
             <select className="input" value={form.status} onChange={(e) => setField("status", e.target.value)}>
               <option value="pending">Εκκρεμεί</option>
               <option value="completed">Ολοκληρωμένο</option>
+              <option value="inactive">Απενεργοποιημένο</option>
             </select>
           </div>
 
