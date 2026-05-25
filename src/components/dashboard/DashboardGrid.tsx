@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react"
 import { GripVertical, Plus, Minus, X, Columns2 } from "lucide-react"
-import type { DashboardLayout, LayoutCell, WidgetId } from "@/hooks/useDashboardLayout"
+import type { DashboardLayout, WidgetId } from "@/hooks/useDashboardLayout"
 
 export const WIDGET_LABELS: Record<WidgetId, string> = {
   kpi_students: "Μαθητές για γιατρό",
@@ -10,6 +10,7 @@ export const WIDGET_LABELS: Record<WidgetId, string> = {
   kpi_no_code: "Παραπεμπτικό χωρίς κωδικό γονέα",
   notepad: "Σημειωματάριο",
   pending: "Εκκρεμότητες",
+  execution_referrals: "Παραπεμπτικά Εκτέλεσης",
 }
 
 const ALL_WIDGETS: Array<{ id: WidgetId; label: string }> = Object.entries(WIDGET_LABELS).map(
@@ -52,9 +53,6 @@ export default function DashboardGrid({ layout, isEditing, editOps, renderWidget
   const [cellDropTarget, setCellDropTarget] = useState<CellPos | null>(null)
 
   // ── Row drag handlers ──
-  function onRowDragStart(idx: number) {
-    rowDragIdxRef.current = idx
-  }
   function onRowDragOver(e: React.DragEvent, idx: number) {
     e.preventDefault()
     if (rowDragIdxRef.current >= 0 && rowDragIdxRef.current !== idx) setRowDropTarget(idx)
@@ -111,7 +109,7 @@ export default function DashboardGrid({ layout, isEditing, editOps, renderWidget
               if (cellDragSrcRef.current) return
               onRowDragOver(e, rowIdx)
             }}
-            onDrop={(e) => {
+            onDrop={() => {
               if (cellDragSrcRef.current) return
               onRowDrop(rowIdx)
             }}

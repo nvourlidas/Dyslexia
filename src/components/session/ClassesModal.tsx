@@ -1,6 +1,6 @@
 // src/components/sessions/ClassesModal.tsx
-import React, { useState } from "react";
-import { Loader2, Trash2, Pencil, Check, X } from "lucide-react";
+import { useState } from "react";
+import { Loader2, Trash2, Pencil, Check } from "lucide-react";
 import { callFunction } from "@/lib/api";
 
 export type ClassRow = {

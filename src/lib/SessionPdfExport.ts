@@ -1,6 +1,5 @@
 // src/lib/SessionPdfExport.ts
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { toTimeStr } from "@/lib/session.utils";
 import { registerNotoSansFonts } from "@/lib/pdfFonts";
 import notoSansUrl from "@/assets/fonts/NotoSans-Regular.ttf?url";

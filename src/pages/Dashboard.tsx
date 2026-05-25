@@ -523,19 +523,3 @@ export default function Dashboard() {
   );
 }
 
-function KpiCard({
-  title,
-  value,
-  loading,
-}: {
-  title: string;
-  value: number;
-  loading: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-panel px-4 py-3">
-      <div className="text-xs text-muted">{title}</div>
-      <div className="mt-1 text-xl font-semibold">{loading ? "…" : value}</div>
-    </div>
-  );
-}

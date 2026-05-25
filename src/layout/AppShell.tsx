@@ -118,7 +118,7 @@ export default function AppShell() {
     for (const entry of NAV) {
       if (entry.type === 'group') {
         const anyActive = entry.children.some((c) =>
-          isActivePath(location.pathname, c.to, c.end),
+          isActivePath(location.pathname, c.to, 'end' in c ? c.end : undefined),
         )
         if (anyActive) open.add(entry.label)
       }
@@ -396,7 +396,7 @@ function NavBlock({
 
   // group
   const isOpen = openGroups.has(entry.label)
-  const anyActive = entry.children.some((c) => isActivePath(pathname, c.to, c.end))
+  const anyActive = entry.children.some((c) => isActivePath(pathname, c.to, 'end' in c ? c.end : undefined))
   const GroupIcon = entry.icon
 
   return (

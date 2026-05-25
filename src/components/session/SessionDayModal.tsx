@@ -1,5 +1,5 @@
 // src/components/sessions/SessionDayModal.tsx
-import React, { useState } from "react";
+import { useState } from "react";
 import { Loader2, Trash2, Check, X, Pencil, Printer } from "lucide-react";
 import { PALETTE, toTimeStr } from "@/lib/session.utils";
 import SessionPdfPreviewModal from "@/components/session/SessionPdfPreviewModal";

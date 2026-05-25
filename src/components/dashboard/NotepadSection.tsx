@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Loader2, Plus, Trash2, StickyNote } from "lucide-react";
 import NoteEditorModal from "./NoteEditorModal";

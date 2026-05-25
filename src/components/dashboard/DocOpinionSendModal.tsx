@@ -44,7 +44,7 @@ type Props = {
   onCountChange: (n: number) => void
 }
 
-export default function DocOpinionSendModal({ open, tenantId, onClose, onCountChange }: Props) {
+export default function DocOpinionSendModal({ open, tenantId: _tenantId, onClose, onCountChange }: Props) {
   const [items, setItems] = useState<DocOpinionRow[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)

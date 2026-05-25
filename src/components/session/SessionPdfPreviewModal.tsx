@@ -1,5 +1,5 @@
 // src/components/sessions/SessionPdfPreviewModal.tsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Download, Printer } from "lucide-react";
 import { generateSessionPdf, downloadSessionPdf, getSessionPdfDataUrl } from "@/lib/SessionPdfExport";
 import type { TeacherDayGroup } from "@/types/session";

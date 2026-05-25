@@ -1,5 +1,5 @@
 // src/components/doc-opinion/DocOpinionConfirmModal.tsx
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 
 type Props = {
   open: boolean;

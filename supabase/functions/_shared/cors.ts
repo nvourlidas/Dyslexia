@@ -5,6 +5,7 @@ export const ALLOWED = new Set<string>([
     "http://localhost:5174",
     "http://127.0.0.1:5174",
     "https://ctgym.cloudtec.gr",
+    "https://dyslexia.cloudtec.gr",
 ]);
 
 export function buildCors(req: Request) {

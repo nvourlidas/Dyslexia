@@ -74,7 +74,7 @@ function DeleteButton({
 }
 
 export default function TeachersTable({
-  tenantId,
+  tenantId: _tenantId,
   loading,
   filteredLength,
   paginated,
@@ -82,7 +82,7 @@ export default function TeachersTable({
   isColVisible,
   selectedIds,
   toggleSelect,
-  clearSelection,
+  clearSelection: _clearSelection,
   allPageSelected,
   toggleSelectPage,
   startIdx,
