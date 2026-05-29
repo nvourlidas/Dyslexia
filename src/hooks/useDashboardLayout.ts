@@ -60,15 +60,14 @@ function loadLayout(): DashboardLayout {
       const parsed = JSON.parse(raw) as DashboardLayout
       if (Array.isArray(parsed?.rows) && parsed.rows.length > 0) return parsed
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[useDashboardLayout] Failed to load layout from localStorage:", e)
   }
   return DEFAULT_LAYOUT
 }
 
-let _seq = Date.now()
 function uid() {
-  return `id-${_seq++}`
+  return crypto.randomUUID()
 }
 
 export function useDashboardLayout() {

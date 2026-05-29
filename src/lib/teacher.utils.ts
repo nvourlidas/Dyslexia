@@ -1,11 +1,7 @@
 import type { TeacherRow, TeacherForm } from "@/types/teacher";
+import { fmtDate } from "@/lib/dateUtils";
 
-export function formatDateDMY(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("el-GR");
-}
+export { fmtDate as formatDateDMY };
 
 export function toForm(r?: TeacherRow | null): TeacherForm {
   if (!r) {

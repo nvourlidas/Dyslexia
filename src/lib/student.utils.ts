@@ -1,5 +1,6 @@
 // src/lib/student.utils.ts
 import type { StudentForm, StudentRow } from "@/types/student";
+import { fmtDate } from "@/lib/dateUtils";
 
 export const EMPTY_FORM: StudentForm = {
   name: "",
@@ -19,15 +20,7 @@ export const EMPTY_FORM: StudentForm = {
   doctor_name: "",
 };
 
-export function formatDateDMY(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
+export { fmtDate as formatDateDMY };
 
 export function toForm(s?: StudentRow | null): StudentForm {
   if (!s) return { ...EMPTY_FORM };

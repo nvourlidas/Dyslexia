@@ -59,6 +59,9 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
 
 const DEFAULT_VISIBLE: ColumnKey[] = ["amka", "city", "created_at"];
 
+const STUDENT_SELECT =
+  "user_id,tenant_id,name,lastname,amka,gender,birthdate,address,city,phone,email,parent_name,parent_phone1,parent_phone2,active,doctor_visit,doctor_name,created_at,updated_at";
+
 
 
 export default function StudentsPage() {
@@ -132,9 +135,6 @@ export default function StudentsPage() {
   const [sortAlpha, setSortAlpha] = useState<"asc" | "desc" | null>(null);
 
 
-
-  const STUDENT_SELECT =
-    "user_id,tenant_id,name,lastname,amka,gender,birthdate,address,city,phone,email,parent_name,parent_phone1,parent_phone2,active,doctor_visit,doctor_name,created_at,updated_at";
 
   async function load() {
     if (!tenantId) return;
@@ -236,8 +236,8 @@ export default function StudentsPage() {
     const cols = buildStudentExportColumns(visibleCols);
     const data = exportRows.map((s) => {
       const obj = studentToExportObject(s);
-      const out: Record<string, any> = {};
-      cols.forEach((c) => (out[c.label] = (obj as any)[c.key]));
+      const out: Record<string, unknown> = {};
+      cols.forEach((c) => (out[c.label] = obj[c.key]));
       return out;
     });
 
@@ -268,7 +268,7 @@ export default function StudentsPage() {
     const head = [cols.map((c) => c.label)];
     const body = exportRows.map((s) => {
       const obj = studentToExportObject(s);
-      return cols.map((c) => String((obj as any)[c.key] ?? ""));
+      return cols.map((c) => String(obj[c.key] ?? ""));
     });
 
     autoTable(doc, {

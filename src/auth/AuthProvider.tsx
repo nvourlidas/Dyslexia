@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    async function fetchProfile(userId: string) {
+    const fetchProfile = useCallback(async (userId: string) => {
         setProfileLoading(true);
 
         const { data, error } = await supabase
@@ -73,16 +73,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setProfile((data as ProfileRow) ?? null);
         setProfileLoading(false);
-    }
+    }, []);
 
-    const refreshProfile = async () => {
+    const refreshProfile = useCallback(async () => {
         const uid = session?.user?.id;
         if (!uid) {
             setProfile(null);
             return;
         }
         await fetchProfile(uid);
-    };
+    }, [session?.user?.id, fetchProfile]);
 
     // ✅ whenever user changes -> load profile (tenant_id included)
     useEffect(() => {

@@ -21,10 +21,7 @@ export function useToast(defaultDurationMs = 4500) {
 
   const pushToast = useCallback(
     (t: Omit<Toast, "id">, ms?: number) => {
-      const id =
-        typeof crypto !== "undefined" && (crypto as any).randomUUID
-          ? crypto.randomUUID()
-          : String(Date.now());
+      const id = crypto.randomUUID();
 
       setToasts((prev) => [...prev, { id, ...t }]);
 

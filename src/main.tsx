@@ -1,5 +1,5 @@
 // src/main.tsx
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
@@ -8,20 +8,18 @@ import { applyAppearance, loadAppearance } from './theme/appearance'
 
 import { AuthProvider } from '@/auth/AuthProvider'
 import ProtectedRoute from '@/auth/ProtectedRoute'
-
 import AppShell from '@/layout/AppShell'
 
-// pages
-import LoginPage from '@/pages/LoginPage'
-import Dashboard from '@/pages/Dashboard'
-import StudentsPage from '@/pages/StudentsPage'
-import TeachersPage from '@/pages/TeachersPage'
-import ThemeSettingsPage from '@/pages/ThemeSettingsPage'
-import SessionsPage from '@/pages/SessionsPage'
-import AttendancePage from '@/pages/AttendancePage'
-import ParapemptikaPage from '@/pages/ParapemptikaPage'
-import DocOpinionPage from '@/pages/DocOpinionPage'
-import PendingPage from '@/pages/PendingPage'
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const StudentsPage = lazy(() => import('@/pages/StudentsPage'))
+const TeachersPage = lazy(() => import('@/pages/TeachersPage'))
+const ThemeSettingsPage = lazy(() => import('@/pages/ThemeSettingsPage'))
+const SessionsPage = lazy(() => import('@/pages/SessionsPage'))
+const AttendancePage = lazy(() => import('@/pages/AttendancePage'))
+const ParapemptikaPage = lazy(() => import('@/pages/ParapemptikaPage'))
+const DocOpinionPage = lazy(() => import('@/pages/DocOpinionPage'))
+const PendingPage = lazy(() => import('@/pages/PendingPage'))
 
 applyTheme(getInitialTheme())
 applyAppearance(loadAppearance())
@@ -52,7 +50,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <Suspense fallback={<div className="min-h-screen" />}>
+        <RouterProvider router={router} />
+      </Suspense>
     </AuthProvider>
   </React.StrictMode>,
 )

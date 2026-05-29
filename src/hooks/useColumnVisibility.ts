@@ -23,7 +23,8 @@ export function useColumnVisibility<K extends string>(params: {
       const raw = localStorage.getItem(globalKey);
       if (!raw) return [...defaultVisible];
       return sanitize(JSON.parse(raw));
-    } catch {
+    } catch (e) {
+      console.warn("[useColumnVisibility] Failed to read from localStorage:", e);
       return [...defaultVisible];
     }
   });
@@ -35,7 +36,9 @@ export function useColumnVisibility<K extends string>(params: {
       const raw = localStorage.getItem(tenantKey);
       if (!raw) return;
       setVisibleCols(sanitize(JSON.parse(raw)));
-    } catch {}
+    } catch (e) {
+      console.warn("[useColumnVisibility] Failed to read tenant key from localStorage:", e);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantKey]);
 
@@ -44,7 +47,9 @@ export function useColumnVisibility<K extends string>(params: {
     try {
       localStorage.setItem(globalKey, JSON.stringify(visibleCols));
       if (tenantKey) localStorage.setItem(tenantKey, JSON.stringify(visibleCols));
-    } catch {}
+    } catch (e) {
+      console.warn("[useColumnVisibility] Failed to write to localStorage:", e);
+    }
   }, [visibleCols, globalKey, tenantKey]);
 
   const isColVisible = (key: K) => visibleCols.includes(key);

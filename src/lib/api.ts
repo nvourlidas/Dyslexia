@@ -19,21 +19,19 @@ export async function callFunction<T>(
     }
   );
 
-// replace your current error block with this:
-if (error) {
-  if (error instanceof FunctionsHttpError) {
-    // Extract the real error body from the edge function
-    const body = await error.context.json().catch(() => null);
-    const apiErr = body?.error;
-    const err = new Error(apiErr?.message ?? error.message);
-    (err as any).code = apiErr?.code ?? "FUNCTION_INVOKE_FAILED";
-    (err as any).details = apiErr?.details;
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const body = await error.context.json().catch(() => null);
+      const apiErr = body?.error;
+      const err = new Error(apiErr?.message ?? error.message);
+      (err as any).code = apiErr?.code ?? "FUNCTION_INVOKE_FAILED";
+      (err as any).details = apiErr?.details;
+      throw err;
+    }
+    const err = new Error(error.message);
+    (err as any).code = "FUNCTION_INVOKE_FAILED";
     throw err;
   }
-  const err = new Error(error.message);
-  (err as any).code = "FUNCTION_INVOKE_FAILED";
-  throw err;
-}
 
   if (!data) {
     const err = new Error("Empty response from function");

@@ -21,7 +21,6 @@ type Kpis = {
   activeStudents: number;
   activeTeachers: number;
   todaySessions: number;
-  missingCodeParapemtika: number;
 };
 
 function startOfTodayIso() {
@@ -31,7 +30,8 @@ function startOfTodayIso() {
 }
 function startOfTomorrowIso() {
   const d = new Date();
-  d.setHours(24, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  d.setHours(0, 0, 0, 0);
   return d.toISOString();
 }
 function plusDaysIso(days: number) {
@@ -67,7 +67,7 @@ export default function Dashboard() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  const tenantId = profile?.tenant_id ?? null;
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -75,7 +75,6 @@ export default function Dashboard() {
     activeStudents: 0,
     activeTeachers: 0,
     todaySessions: 0,
-    missingCodeParapemtika: 0,
   });
 
   const [expiring30Count, setExpiring30Count] = useState(0);
@@ -104,10 +103,6 @@ export default function Dashboard() {
 
   // Expiring 30-day modal
   const [showExpiringModal, setShowExpiringModal] = useState(false);
-
-  useEffect(() => {
-    setTenantId(profile?.tenant_id ?? null)
-  }, [profile?.tenant_id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,7 +228,6 @@ export default function Dashboard() {
           activeStudents: studentsRes.count ?? 0,
           activeTeachers: teachersRes.count ?? 0,
           todaySessions: sessionsRes.count ?? 0,
-          missingCodeParapemtika: missingCodeRes.count ?? 0,
         });
 
         setExpiring30Count(expCountRes.count ?? 0);
@@ -276,7 +270,7 @@ export default function Dashboard() {
       {
         key: "missingCode",
         title: "Παραπεμπτικά χωρίς κωδικό",
-        value: kpis.missingCodeParapemtika,
+        value: noCodeCount,
       },
       {
         key: "execution",
@@ -284,7 +278,7 @@ export default function Dashboard() {
         value: parapemtikaCount,
       },
     ];
-  }, [expiring30Count, kpis.missingCodeParapemtika, parapemtikaCount]);
+  }, [expiring30Count, noCodeCount, parapemtikaCount]);
 
   function renderWidget(widgetId: WidgetId | null) {
     if (!widgetId) return null;
