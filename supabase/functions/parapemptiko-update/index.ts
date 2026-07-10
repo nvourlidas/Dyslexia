@@ -1,6 +1,7 @@
 // supabase/functions/parapemptiko-update/index.ts
 import { adminClient } from "../_shared/supabase.ts";
 import { postHandler, ok, fail } from "../_shared/handler.ts";
+import { assertOwnedIds, TenancyError } from "../_shared/tenancy.ts";
 
 postHandler(async (payload, tenantId, _, req) => {
   const { id, title, student_id, code, code_diagnosis, start_date, end_date, status, notes } = payload;
@@ -8,6 +9,15 @@ postHandler(async (payload, tenantId, _, req) => {
   if (!id) return fail("MISSING_ID", "Το id είναι υποχρεωτικό.", req);
 
   const admin = adminClient();
+
+  if (student_id) {
+    try {
+      await assertOwnedIds(admin, "students", [student_id], tenantId, "user_id");
+    } catch (err) {
+      if (err instanceof TenancyError) return fail(err.code, err.message, req, err.status);
+      throw err;
+    }
+  }
 
   const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
   if (title !== undefined) updateData.title = String(title).trim();
@@ -22,13 +32,18 @@ postHandler(async (payload, tenantId, _, req) => {
   }
   if (notes !== undefined) updateData.notes = notes ? String(notes).trim() : null;
 
-  const { error } = await admin
+  const { data: updatedRows, error } = await admin
     .from("parapemtiko")
     .update(updateData)
     .eq("tenant_id", tenantId)
-    .eq("id", String(id));
+    .eq("id", String(id))
+    .select();
 
   if (error) return fail("DB_UPDATE_FAILED", error.message, req);
+
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail("NOT_FOUND", "Το παραπεμπτικό δεν βρέθηκε.", req, 404);
+  }
 
   return ok({}, req);
 });

@@ -1,41 +1,31 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// supabase/functions/student-delete/index.ts
+import { adminClient } from "../_shared/supabase.ts";
+import { postHandler, ok, fail } from "../_shared/handler.ts";
 
-import { withCors } from "../_shared/cors.ts";
-import { adminClient, authedClient } from "../_shared/supabase.ts";
-import { getCallerProfileOrFail } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return withCors(null, { status: 204 }, req);
-  if (req.method !== "POST") return withCors("Method not allowed", { status: 405 }, req);
-
-  let payload: any;
-  try {
-    payload = await req.json();
-  } catch {
-    return withCors(JSON.stringify({ error: "invalid_json" }), { status: 400 }, req);
-  }
-
-  const { user_id } = payload || {};
-  if (!user_id) {
-    return withCors(JSON.stringify({ error: "missing_user_id" }), { status: 400 }, req);
-  }
-
-  const userClient = authedClient(req);
-  const caller = await getCallerProfileOrFail(req, userClient);
-  if (!caller.ok) return caller.res;
+postHandler(async (payload, tenantId, _profile, req) => {
+  const { user_id } = payload ?? {};
+  if (!user_id) return fail("MISSING_FIELDS", "Το user_id είναι υποχρεωτικό.", req);
 
   const admin = adminClient();
 
   const { error } = await admin
     .from("students")
     .delete()
-    .eq("tenant_id", caller.tenantId)
+    .eq("tenant_id", tenantId)
     .eq("user_id", String(user_id));
 
   if (error) {
-    return withCors(JSON.stringify({ error: error.message }), { status: 400 }, req);
+    // 23503 = foreign_key_violation: the student still has linked records
+    if (error.code === "23503") {
+      return fail(
+        "CONFLICT",
+        "Ο μαθητής έχει συνδεδεμένες εγγραφές (γνωματεύσεις, παραπεμπτικά ή συνεδρίες) και δεν μπορεί να διαγραφεί.",
+        req,
+        409,
+      );
+    }
+    return fail("DB_DELETE_FAILED", error.message, req);
   }
 
-  return withCors(JSON.stringify({ ok: true }), { status: 200 }, req);
+  return ok({ user_id }, req);
 });

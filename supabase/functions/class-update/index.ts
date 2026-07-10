@@ -1,31 +1,19 @@
 // supabase/functions/class-update/index.ts
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { withCors } from "../_shared/cors.ts";
-import { adminClient, authedClient } from "../_shared/supabase.ts";
-import { getCallerProfileOrFail } from "../_shared/auth.ts";
+import { adminClient } from "../_shared/supabase.ts";
+import { postHandler, ok, fail } from "../_shared/handler.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return withCors(null, { status: 204 }, req);
-  if (req.method !== "POST")
-    return withCors(JSON.stringify({ ok: false, error: { code: "METHOD_NOT_ALLOWED" } }), { status: 405 }, req);
-
-  let payload: any;
-  try { payload = await req.json(); }
-  catch { return withCors(JSON.stringify({ ok: false, error: { code: "INVALID_JSON" } }), { status: 400 }, req); }
-
+postHandler(async (payload, tenantId, _profile, req) => {
   const { id, title, description, active } = payload ?? {};
 
-  if (!id || !title || !String(title).trim())
-    return withCors(JSON.stringify({ ok: false, error: { code: "MISSING_FIELDS", message: "id και title είναι υποχρεωτικά." } }), { status: 400 }, req);
-
-  const userClient = authedClient(req);
-  const caller = await getCallerProfileOrFail(req, userClient);
-  if (!caller.ok) return caller.res;
+  if (!id || !title || !String(title).trim()) {
+    return fail("MISSING_FIELDS", "id και title είναι υποχρεωτικά.", req);
+  }
 
   const admin = adminClient();
 
-  const { error } = await admin
+  // Full update: description/active που δεν στέλνονται επανέρχονται στα
+  // defaults — η φόρμα του frontend στέλνει πάντα όλα τα πεδία.
+  const { data: updatedRows, error } = await admin
     .from("classes")
     .update({
       title: String(title).trim(),
@@ -34,10 +22,14 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     })
     .eq("id", String(id))
-    .eq("tenant_id", caller.tenantId);
+    .eq("tenant_id", tenantId)
+    .select();
 
-  if (error)
-    return withCors(JSON.stringify({ ok: false, error: { code: "DB_UPDATE_FAILED", message: error.message } }), { status: 400 }, req);
+  if (error) return fail("DB_UPDATE_FAILED", error.message, req);
 
-  return withCors(JSON.stringify({ ok: true, data: { id } }), { status: 200 }, req);
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail("NOT_FOUND", "Το τμήμα δεν βρέθηκε.", req, 404);
+  }
+
+  return ok({ id }, req);
 });

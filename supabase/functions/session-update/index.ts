@@ -1,29 +1,27 @@
 // supabase/functions/session-update/index.ts
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { withCors } from "../_shared/cors.ts";
-import { adminClient, authedClient } from "../_shared/supabase.ts";
-import { getCallerProfileOrFail } from "../_shared/auth.ts";
+import { adminClient } from "../_shared/supabase.ts";
+import { postHandler, ok, fail } from "../_shared/handler.ts";
+import { assertOwnedIds, TenancyError } from "../_shared/tenancy.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return withCors(null, { status: 204 }, req);
-  if (req.method !== "POST")
-    return withCors(JSON.stringify({ ok: false, error: { code: "METHOD_NOT_ALLOWED" } }), { status: 405 }, req);
-
-  let payload: any;
-  try { payload = await req.json(); }
-  catch { return withCors(JSON.stringify({ ok: false, error: { code: "INVALID_JSON" } }), { status: 400 }, req); }
-
+postHandler(async (payload, tenantId, _profile, req) => {
   const { id, student_id, starts_at, ends_at, status, notes } = payload ?? {};
 
-  if (!id)
-    return withCors(JSON.stringify({ ok: false, error: { code: "MISSING_FIELDS", message: "id είναι υποχρεωτικό." } }), { status: 400 }, req);
-
-  const userClient = authedClient(req);
-  const caller = await getCallerProfileOrFail(req, userClient);
-  if (!caller.ok) return caller.res;
+  if (!id) return fail("MISSING_FIELDS", "id είναι υποχρεωτικό.", req);
 
   const admin = adminClient();
+
+  // Ο client-supplied student_id πρέπει να ανήκει στο tenant του caller —
+  // ίδιο guard με το session-create.
+  if (student_id) {
+    try {
+      await assertOwnedIds(admin, "students", [student_id], tenantId, "user_id");
+    } catch (err) {
+      if (err instanceof TenancyError) {
+        return fail(err.code, err.message, req, err.status);
+      }
+      throw err;
+    }
+  }
 
   // Update session fields if provided
   const sessionUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
@@ -32,32 +30,38 @@ serve(async (req) => {
   if (status) sessionUpdate.status = String(status);
   if (notes !== undefined) sessionUpdate.notes = notes ? String(notes).trim() : null;
 
-  const { error: sessionErr } = await admin
+  const { data: updatedRows, error: sessionErr } = await admin
     .from("class_sessions")
     .update(sessionUpdate)
     .eq("id", String(id))
-    .eq("tenant_id", caller.tenantId);
+    .eq("tenant_id", tenantId)
+    .select();
 
-  if (sessionErr)
-    return withCors(JSON.stringify({ ok: false, error: { code: "DB_UPDATE_FAILED", message: sessionErr.message } }), { status: 400 }, req);
+  if (sessionErr) return fail("DB_UPDATE_FAILED", sessionErr.message, req);
 
-  // Handle student update: upsert or delete class_session_students
+  if (!updatedRows || updatedRows.length === 0) {
+    return fail("NOT_FOUND", "Η συνεδρία δεν βρέθηκε.", req, 404);
+  }
+
+  // Handle student update: replace or remove the class_session_students record
   if (student_id !== undefined) {
-    // Remove existing student record
-    await admin.from("class_session_students").delete().eq("session_id", String(id));
+    await admin
+      .from("class_session_students")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("session_id", String(id));
 
     if (student_id) {
       const { error: attErr } = await admin.from("class_session_students").insert({
-        tenant_id: caller.tenantId,
+        tenant_id: tenantId,
         session_id: String(id),
         student_id: String(student_id),
         status: "present",
         marked_at: new Date().toISOString(),
       });
-      if (attErr)
-        return withCors(JSON.stringify({ ok: false, error: { code: "ATT_UPDATE_FAILED", message: attErr.message } }), { status: 400 }, req);
+      if (attErr) return fail("ATT_UPDATE_FAILED", attErr.message, req);
     }
   }
 
-  return withCors(JSON.stringify({ ok: true, data: { id } }), { status: 200 }, req);
+  return ok({ id }, req);
 });

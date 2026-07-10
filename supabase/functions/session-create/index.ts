@@ -1,34 +1,33 @@
 // supabase/functions/session-create/index.ts
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { withCors } from "../_shared/cors.ts";
-import { adminClient, authedClient } from "../_shared/supabase.ts";
-import { getCallerProfileOrFail } from "../_shared/auth.ts";
+import { adminClient } from "../_shared/supabase.ts";
+import { postHandler, ok, fail } from "../_shared/handler.ts";
+import { assertOwnedIds, TenancyError } from "../_shared/tenancy.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return withCors(null, { status: 204 }, req);
-  if (req.method !== "POST")
-    return withCors(JSON.stringify({ ok: false, error: { code: "METHOD_NOT_ALLOWED" } }), { status: 405 }, req);
-
-  let payload: any;
-  try { payload = await req.json(); }
-  catch { return withCors(JSON.stringify({ ok: false, error: { code: "INVALID_JSON" } }), { status: 400 }, req); }
-
+postHandler(async (payload, tenantId, _profile, req) => {
   const { teacher_id, starts_at, ends_at, student_id, class_id, notes } = payload ?? {};
 
-  if (!teacher_id || !starts_at || !ends_at)
-    return withCors(JSON.stringify({ ok: false, error: { code: "MISSING_FIELDS", message: "teacher_id, starts_at, ends_at είναι υποχρεωτικά." } }), { status: 400 }, req);
-
-  const userClient = authedClient(req);
-  const caller = await getCallerProfileOrFail(req, userClient);
-  if (!caller.ok) return caller.res;
+  if (!teacher_id || !starts_at || !ends_at) {
+    return fail("MISSING_FIELDS", "teacher_id, starts_at, ends_at είναι υποχρεωτικά.", req);
+  }
 
   const admin = adminClient();
+
+  try {
+    await assertOwnedIds(admin, "teacher", [teacher_id], tenantId);
+    await assertOwnedIds(admin, "classes", [class_id], tenantId);
+    await assertOwnedIds(admin, "students", [student_id], tenantId, "user_id");
+  } catch (err) {
+    if (err instanceof TenancyError) {
+      return fail(err.code, err.message, req, err.status);
+    }
+    throw err;
+  }
+
   const sessionId = crypto.randomUUID();
 
   const { error: sessionErr } = await admin.from("class_sessions").insert({
     id: sessionId,
-    tenant_id: caller.tenantId,
+    tenant_id: tenantId,
     class_id: class_id ?? null,
     teacher_id: String(teacher_id),
     starts_at: String(starts_at),
@@ -39,21 +38,19 @@ serve(async (req) => {
     updated_at: new Date().toISOString(),
   });
 
-  if (sessionErr)
-    return withCors(JSON.stringify({ ok: false, error: { code: "DB_INSERT_FAILED", message: sessionErr.message } }), { status: 400 }, req);
+  if (sessionErr) return fail("DB_INSERT_FAILED", sessionErr.message, req);
 
   // If a student is provided, create the attendance record
   if (student_id) {
     const { error: attErr } = await admin.from("class_session_students").insert({
-      tenant_id: caller.tenantId,
+      tenant_id: tenantId,
       session_id: sessionId,
       student_id: String(student_id),
       status: "present",
       marked_at: new Date().toISOString(),
     });
-    if (attErr)
-      return withCors(JSON.stringify({ ok: false, error: { code: "ATT_INSERT_FAILED", message: attErr.message } }), { status: 400 }, req);
+    if (attErr) return fail("ATT_INSERT_FAILED", attErr.message, req);
   }
 
-  return withCors(JSON.stringify({ ok: true, data: { id: sessionId } }), { status: 200 }, req);
+  return ok({ id: sessionId }, req);
 });
